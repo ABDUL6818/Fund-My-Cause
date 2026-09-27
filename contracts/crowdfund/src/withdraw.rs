@@ -9,7 +9,9 @@
 use soroban_sdk::{token, Address, Env};
 
 use crate::{
+    access::auth_admin,
     errors::ContractError,
+    helpers::require_auth_creator,
     storage::{
         DataKey, KEY_ADMIN, KEY_CREATOR, KEY_DEADLINE, KEY_GOAL, KEY_PLATFORM, KEY_RELEASED,
         KEY_SOFT_CAP, KEY_STATUS, KEY_STREAM, KEY_TOKEN, KEY_TOTAL, KEY_VESTING,
@@ -94,7 +96,7 @@ pub(crate) fn withdraw(env: Env) -> Result<(), ContractError> {
     // === Batch all instance reads up-front
     let inst = env.storage().instance();
     let status: Status = inst.get(&KEY_STATUS).unwrap();
-    let creator: Address = inst.get(&KEY_CREATOR).unwrap();
+    let creator = require_auth_creator(&env)?;
     let deadline: u64 = inst.get(&KEY_DEADLINE).unwrap();
     let goal: i128 = inst.get(&KEY_GOAL).unwrap();
     let total: i128 = inst.get(&KEY_TOTAL).unwrap();
@@ -108,7 +110,6 @@ pub(crate) fn withdraw(env: Env) -> Result<(), ContractError> {
     if status != Status::Active {
         return Err(ContractError::NotActive);
     }
-    creator.require_auth();
 
     let now = env.ledger().timestamp();
     validate_deadline_passed(now, deadline)?;
@@ -170,9 +171,7 @@ pub(crate) fn set_stream_config(
     start_time: u64,
     end_time: u64,
 ) -> Result<(), ContractError> {
-    let inst = env.storage().instance();
-    let creator: Address = inst.get(&KEY_CREATOR).unwrap();
-    creator.require_auth();
+    require_auth_creator(&env)?;
 
     let now = env.ledger().timestamp();
     if start_time <= now || end_time <= start_time {
@@ -198,9 +197,7 @@ pub(crate) fn set_stream_config(
 
 /// Claims the portion of streamed funds that has unlocked since the last claim.
 pub(crate) fn claim_stream(env: Env) -> Result<(), ContractError> {
-    let inst = env.storage().instance();
-    let creator: Address = inst.get(&KEY_CREATOR).unwrap();
-    creator.require_auth();
+    let creator = require_auth_creator(&env)?;
 
     let mut stream: StreamConfig = inst
         .get(&KEY_STREAM)
@@ -289,9 +286,7 @@ pub(crate) fn record_release(env: Env, amount: i128) -> Result<(), ContractError
     if amount <= 0 {
         return Err(ContractError::AmountNotPositive);
     }
-    let inst = env.storage().instance();
-    let admin: Address = inst.get(&KEY_ADMIN).unwrap();
-    admin.require_auth();
+    auth_admin(&env)?;
 
     let released: i128 = inst.get(&KEY_RELEASED).unwrap_or(0);
     let new_released = released

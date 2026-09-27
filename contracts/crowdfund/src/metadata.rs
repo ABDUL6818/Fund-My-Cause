@@ -8,6 +8,7 @@ use soroban_sdk::{Address, Env, String, Vec};
 
 use crate::{
     errors::ContractError,
+    helpers::require_auth_creator,
     storage::{
         KEY_CREATOR, KEY_DESC, KEY_IPFS_CID, KEY_META_HIST, KEY_SOCIAL, KEY_STATUS, KEY_TITLE,
         TTL_PERSISTENT_ENTRY,
@@ -31,8 +32,7 @@ pub(crate) fn update_metadata(
     if status != Status::Active {
         return Err(ContractError::NotActive);
     }
-    let creator: Address = inst.get(&KEY_CREATOR).unwrap();
-    creator.require_auth();
+    require_auth_creator(&env)?;
 
     let updated_title = title.is_some();
     let updated_description = description.is_some();
@@ -116,8 +116,7 @@ pub(crate) fn update_ipfs_cid(env: Env, cid: String) -> Result<(), ContractError
     if status != Status::Active {
         return Err(ContractError::NotActive);
     }
-    let creator: Address = inst.get(&KEY_CREATOR).unwrap();
-    creator.require_auth();
+    require_auth_creator(&env)?;
 
     // Validate CID length: v0 (base58 "Qm…", len 46) or v1 (base32 "bafy…", len >= 59).
     // Byte-level prefix inspection is intentionally omitted: Soroban `String`

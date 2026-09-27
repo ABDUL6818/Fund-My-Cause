@@ -86,6 +86,9 @@ mod withdraw;
 
 pub use errors::ContractError;
 pub use security::{CircuitBreaker, ContributorGate, InputValidator, RateLimiter, ReentrancyGuard};
+
+use access::auth_admin;
+use helpers::require_auth_creator;
 pub use storage::{
     BASIS_POINTS_MAX,
     CONTRACT_VERSION,
@@ -836,9 +839,7 @@ impl CrowdfundContract {
     /// - Sets emergency lock time to current time + lock_period
     /// - Publishes "EmergencyWithdrawalInitiated" event
     pub fn initiate_emergency_withdrawal(env: Env, lock_period: u64) -> Result<(), ContractError> {
-        let inst = env.storage().instance();
-        let admin: Address = inst.get(&KEY_ADMIN).unwrap();
-        admin.require_auth();
+        auth_admin(&env)?;
         let lock_until = env.ledger().timestamp() + lock_period;
         inst.set(&DataKey::EmergencyLockTime, &lock_until);
         // Reset multi-sig approval count for the new session so previous approvals
@@ -868,9 +869,7 @@ impl CrowdfundContract {
     /// - Clears emergency lock time
     /// - Publishes "EmergencyWithdrawalExecuted" event
     pub fn execute_emergency_withdrawal(env: Env) -> Result<(), ContractError> {
-        let inst = env.storage().instance();
-        let admin: Address = inst.get(&KEY_ADMIN).unwrap();
-        admin.require_auth();
+        auth_admin(&env)?;
 
         let lock_time: u64 = inst.get(&DataKey::EmergencyLockTime).unwrap_or(0);
         if lock_time == 0 || env.ledger().timestamp() < lock_time {
@@ -919,9 +918,7 @@ impl CrowdfundContract {
     /// - Clears emergency lock time
     /// - Publishes "EmergencyWithdrawalCancelled" event
     pub fn cancel_emergency_withdrawal(env: Env) -> Result<(), ContractError> {
-        let inst = env.storage().instance();
-        let admin: Address = inst.get(&KEY_ADMIN).unwrap();
-        admin.require_auth();
+        auth_admin(&env)?;
         inst.set(&DataKey::EmergencyLockTime, &0u64);
         env.events()
             .publish(("campaign", "emergency_cancelled"), ());
@@ -949,9 +946,7 @@ impl CrowdfundContract {
         required_approvals: u32,
         approvers: Vec<Address>,
     ) -> Result<(), ContractError> {
-        let inst = env.storage().instance();
-        let admin: Address = inst.get(&KEY_ADMIN).unwrap();
-        admin.require_auth();
+        auth_admin(&env)?;
 
         // required_approvals must be between 1 and the total number of approvers
         if required_approvals == 0 || required_approvals > approvers.len() {
@@ -1133,9 +1128,7 @@ impl CrowdfundContract {
         match_ratio: u32,
         max_match: i128,
     ) -> Result<(), ContractError> {
-        let inst = env.storage().instance();
-        let creator: Address = inst.get(&KEY_CREATOR).unwrap();
-        creator.require_auth();
+        require_auth_creator(&env)?;
 
         if match_ratio > 10_000 {
             return Err(ContractError::InvalidFee);
@@ -1390,9 +1383,7 @@ impl CrowdfundContract {
     /// * `Ok(())` on success
     /// * `Err(ContractError::InvalidDeadline)` if new_deadline <= current_deadline
     pub fn propose_extension(env: Env, new_deadline: u64) -> Result<(), ContractError> {
-        let inst = env.storage().instance();
-        let creator: Address = inst.get(&KEY_CREATOR).unwrap();
-        creator.require_auth();
+        let creator = require_auth_creator(&env)?;
 
         let current_deadline: u64 = inst.get(&KEY_DEADLINE).unwrap();
         validate_deadline_extension(new_deadline, current_deadline)?;
@@ -1763,8 +1754,7 @@ impl CrowdfundContract {
         suggested_min: i128,
         goal_multiplier: u32,
     ) -> Result<(), ContractError> {
-        let creator: Address = env.storage().instance().get(&KEY_CREATOR).unwrap();
-        creator.require_auth();
+        require_auth_creator(&env)?;
 
         validate_string_length(&name, 64)?;
         validate_string_length(&description, 512)?;
@@ -1817,8 +1807,7 @@ impl CrowdfundContract {
     /// - Stores tier list in instance storage
     /// - Publishes `EventTiersSet` event
     pub fn set_reward_tiers(env: Env, tiers: Vec<RewardTier>) -> Result<(), ContractError> {
-        let creator: Address = env.storage().instance().get(&KEY_CREATOR).unwrap();
-        creator.require_auth();
+        require_auth_creator(&env)?;
 
         if tiers.is_empty() {
             return Err(ContractError::InvalidGoal);
@@ -2304,8 +2293,7 @@ impl CrowdfundContract {
         fee_bps: u32,
         provider: Address,
     ) -> Result<(), ContractError> {
-        let creator: Address = env.storage().instance().get(&KEY_CREATOR).unwrap();
-        creator.require_auth();
+        require_auth_creator(&env)?;
 
         validate_fee_bps(fee_bps)?;
         validate_address_not_self(&creator, &provider)?;
@@ -2445,9 +2433,7 @@ impl CrowdfundContract {
         reward_token: Address,
         reward_per_unit: i128,
     ) -> Result<(), ContractError> {
-        let inst = env.storage().instance();
-        let creator: Address = inst.get(&KEY_CREATOR).unwrap();
-        creator.require_auth();
+        require_auth_creator(&env)?;
 
         validate_positive_amount(reward_per_unit)?;
 
@@ -2709,9 +2695,7 @@ impl CrowdfundContract {
     /// * `Ok(())` on success
     /// * `Err(ContractError::Unauthorized)` if caller is not admin
     pub fn migrate_version(env: Env) -> Result<(), ContractError> {
-        let inst = env.storage().instance();
-        let admin: Address = inst.get(&KEY_ADMIN).unwrap();
-        admin.require_auth();
+        auth_admin(&env)?;
 
         let from_version: u32 = inst.get(&KEY_CONTRACT_VERSION).unwrap_or(0);
         let now = env.ledger().timestamp();
@@ -2822,8 +2806,7 @@ impl CrowdfundContract {
     /// * `Ok(())` on success
     /// * `Err(ContractError::Unauthorized)` if caller is not admin
     pub fn debug_log(env: Env, message: String) -> Result<(), ContractError> {
-        let admin: Address = env.storage().instance().get(&KEY_ADMIN).unwrap();
-        admin.require_auth();
+        auth_admin(&env)?;
 
         let now = env.ledger().timestamp();
         env.events().publish(
@@ -2840,8 +2823,7 @@ impl CrowdfundContract {
     ///
     /// Returns the stored contribution amount without requiring contributor auth.
     pub fn inspect_contribution(env: Env, contributor: Address) -> Result<i128, ContractError> {
-        let admin: Address = env.storage().instance().get(&KEY_ADMIN).unwrap();
-        admin.require_auth();
+        auth_admin(&env)?;
 
         Ok(env
             .storage()
@@ -2857,8 +2839,7 @@ impl CrowdfundContract {
     /// When a recorded execution duration exceeds this threshold, an
     /// `EventPerfAlert` is emitted. Set to 0 to disable alerting.
     pub fn set_perf_threshold(env: Env, threshold_ms: u64) -> Result<(), ContractError> {
-        let admin: Address = env.storage().instance().get(&KEY_ADMIN).unwrap();
-        admin.require_auth();
+        auth_admin(&env)?;
 
         env.storage()
             .instance()
@@ -2884,8 +2865,7 @@ impl CrowdfundContract {
         function_name: String,
         duration_ms: u64,
     ) -> Result<(), ContractError> {
-        let admin: Address = env.storage().instance().get(&KEY_ADMIN).unwrap();
-        admin.require_auth();
+        auth_admin(&env)?;
 
         let now = env.ledger().timestamp();
         let stats_key = DataKey::PerfStats(function_name.clone());
@@ -3302,9 +3282,7 @@ impl CrowdfundContract {
         required_approvals: u32,
         timelock_delay: u64,
     ) -> Result<(), ContractError> {
-        let inst = env.storage().instance();
-        let admin: Address = inst.get(&KEY_ADMIN).unwrap();
-        admin.require_auth();
+        auth_admin(&env)?;
 
         if inst.has(&KEY_GOVERNANCE_CONFIG) {
             return Err(ContractError::AlreadyInitialized);
@@ -3672,9 +3650,7 @@ impl CrowdfundContract {
         required_approvals: u32,
         timelock_delay: u64,
     ) -> Result<(), ContractError> {
-        let inst = env.storage().instance();
-        let admin: Address = inst.get(&KEY_ADMIN).unwrap();
-        admin.require_auth();
+        auth_admin(&env)?;
 
         validate_governance_config(required_approvals, governors.len(), timelock_delay)?;
 
@@ -3740,9 +3716,7 @@ impl CrowdfundContract {
         pool: i128,
         rate_bps: u32,
     ) -> Result<(), ContractError> {
-        let inst = env.storage().instance();
-        let creator: Address = inst.get(&KEY_CREATOR).unwrap();
-        creator.require_auth();
+        require_auth_creator(&env)?;
 
         let status: Status = inst.get(&KEY_STATUS).unwrap();
         if status != Status::Active {
