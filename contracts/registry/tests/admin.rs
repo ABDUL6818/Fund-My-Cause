@@ -459,6 +459,220 @@ fn test_get_campaigns_by_category_pagination() {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
+// Privilege escalation edge cases (#1312)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+#[test]
+fn test_update_status_rejects_non_admin() {
+    // Non-admin caller should be rejected even if campaign is registered
+    let env = setup_env();
+    let (client, admin) = deploy_and_init(&env);
+    let campaign = Address::generate(&env);
+    let non_admin = Address::generate(&env);
+
+    client.register_with_status(&campaign, &CampaignStatus::Active);
+    
+    // Switch to non-admin context
+    non_admin.require_auth();
+    let result = client.try_update_status(
+        &campaign,
+        &CampaignStatus::Active,
+        &CampaignStatus::Successful,
+    );
+    
+    assert_eq!(
+        result,
+        Err(Ok(ContractError::Unauthorized)),
+        "non-admin should be rejected for update_status"
+    );
+}
+
+#[test]
+fn test_initialize_rejects_second_admin() {
+    // First admin initializes, second admin should not be able to reinitialize
+    let env = setup_env();
+    let (client, admin) = deploy_and_init(&env);
+    let second_admin = Address::generate(&env);
+    
+    // Switch to second admin context
+    second_admin.require_auth();
+    let result = client.try_initialize(&second_admin);
+    
+    assert_eq!(
+        result,
+        Err(Ok(ContractError::AlreadyInitialized)),
+        "second admin should not be able to reinitialize"
+    );
+}
+
+#[test]
+fn test_initialize_requires_admin_auth() {
+    // Test that initialize requires auth from the admin address being set
+    let env = setup_env();
+    let client = deploy(&env);
+    let admin = Address::generate(&env);
+    let imposter = Address::generate(&env);
+    
+    // Imposter tries to initialize with admin address (should fail)
+    imposter.require_auth();
+    let result = client.try_initialize(&admin);
+    
+    // Should fail because imposter is not the admin address being set
+    assert!(
+        result.is_err(),
+        "initialize should require auth from the admin address being set"
+    );
+}
+
+#[test]
+fn test_register_requires_exact_campaign_auth() {
+    // Campaign A should not be able to auth for Campaign B
+    let env = setup_env();
+    let (client, _admin) = deploy_and_init(&env);
+    let campaign_a = Address::generate(&env);
+    let campaign_b = Address::generate(&env);
+    
+    // Campaign A tries to register Campaign B
+    campaign_a.require_auth();
+    let result = client.try_register(&campaign_b);
+    
+    // Should fail because auth doesn't match the campaign being registered
+    assert!(
+        result.is_err(),
+        "campaign A should not be able to register campaign B"
+    );
+}
+
+#[test]
+fn test_update_status_invalid_transitions() {
+    // Test invalid status transitions (e.g., Active to Active, Failed to Active without proper flow)
+    let env = setup_env();
+    let (client, _admin) = deploy_and_init(&env);
+    let campaign = Address::generate(&env);
+    
+    client.register_with_status(&campaign, &CampaignStatus::Active);
+    
+    // Try invalid transition: Active to Active (should work but be a no-op)
+    client.update_status(
+        &campaign,
+        &CampaignStatus::Active,
+        &CampaignStatus::Active,
+    );
+    
+    // Campaign should still be in Active status
+    assert_eq!(
+        client
+            .list_by_status(&CampaignStatus::Active, &0, &10)
+            .len(),
+        1
+    );
+}
+
+#[test]
+fn test_update_status_wrong_old_status() {
+    // Admin tries to update status with wrong old_status parameter
+    // This could be a privilege escalation if not handled correctly
+    let env = setup_env();
+    let (client, _admin) = deploy_and_init(&env);
+    let campaign = Address::generate(&env);
+    
+    // Register campaign as Active
+    client.register_with_status(&campaign, &CampaignStatus::Active);
+    
+    // Admin tries to update with wrong old_status (Active -> Successful but claiming old_status is Failed)
+    // The contract should still find and move the campaign since it checks actual status
+    client.update_status(
+        &campaign,
+        &CampaignStatus::Failed, // Wrong old_status
+        &CampaignStatus::Successful,
+    );
+    
+    // Campaign should now be in Successful, not in Active or Failed
+    assert_eq!(
+        client
+            .list_by_status(&CampaignStatus::Active, &0, &10)
+            .len(),
+        0
+    );
+    assert_eq!(
+        client
+            .list_by_status(&CampaignStatus::Failed, &0, &10)
+            .len(),
+        0
+    );
+    assert_eq!(
+        client
+            .list_by_status(&CampaignStatus::Successful, &0, &10)
+            .len(),
+        1
+    );
+}
+
+#[test]
+fn test_category_boundary_conditions() {
+    // Test edge cases for category IDs
+    let env = setup_env();
+    let (client, _admin) = deploy_and_init(&env);
+    let campaign = Address::generate(&env);
+    
+    // Test with maximum u32 value
+    client.register_with_category(&campaign, &u32::MAX);
+    
+    let result = client.get_campaigns_by_category(&u32::MAX, &0, &10);
+    assert_eq!(result.len(), 1, "should handle max category ID");
+}
+
+#[test]
+fn test_duplicate_registration_edge_cases() {
+    // Test multiple registration attempts with different auth patterns
+    let env = setup_env();
+    let (client, _admin) = deploy_and_init(&env);
+    let campaign = Address::generate(&env);
+    
+    // First registration
+    client.register(&campaign);
+    assert_eq!(client.list(&0, &10).len(), 1);
+    
+    // Try registering with category (should still deduplicate)
+    client.register_with_category(&campaign, &0);
+    assert_eq!(client.list(&0, &10).len(), 1);
+    assert_eq!(client.get_campaigns_by_category(&0, &0, &10).len(), 1);
+    
+    // Try registering with status (should still deduplicate)
+    client.register_with_status(&campaign, &CampaignStatus::Active);
+    assert_eq!(client.list(&0, &10).len(), 1);
+    assert_eq!(
+        client
+            .list_by_status(&CampaignStatus::Active, &0, &10)
+            .len(),
+        1
+    );
+}
+
+#[test]
+fn test_empty_campaign_lists() {
+    // Edge cases for empty lists and pagination
+    let env = setup_env();
+    let (client, _admin) = deploy_and_init(&env);
+    
+    // Test list with empty registry
+    assert_eq!(client.list(&0, &10).len(), 0);
+    assert_eq!(client.list(&100, &10).len(), 0); // offset beyond empty list
+    
+    // Test status lists with no campaigns
+    assert_eq!(
+        client
+            .list_by_status(&CampaignStatus::Active, &0, &10)
+            .len(),
+        0
+    );
+    
+    // Test category lists with no campaigns
+    assert_eq!(client.get_campaigns_by_category(&0, &0, &10).len(), 0);
+    assert_eq!(client.get_campaigns_by_category(&0, &100, &10).len(), 0);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
 // Full lifecycle integration
 // ═══════════════════════════════════════════════════════════════════════════════
 
