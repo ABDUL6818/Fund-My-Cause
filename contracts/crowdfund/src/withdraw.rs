@@ -74,10 +74,10 @@ fn apply_vesting_schedule(
         return Err(ContractError::VestingNotComplete);
     }
 
-    if now >= v.cliff + v.duration {
+    if now >= v.cliff.checked_add(v.duration).ok_or(ContractError::Overflow)? {
         Ok(payout)
     } else {
-        let elapsed = now - v.cliff;
+        let elapsed = now.checked_sub(v.cliff).ok_or(ContractError::Overflow)?;
         Ok(payout
             .checked_mul(elapsed as i128)
             .ok_or(ContractError::Overflow)?
@@ -120,7 +120,7 @@ pub(crate) fn withdraw(env: Env) -> Result<(), ContractError> {
 
     // === Calculate fee and payout
     let fee = deduct_platform_fee(&env, &token_client, &platform_config, total, true);
-    let mut payout = total - fee;
+    let mut payout = total.checked_sub(fee).ok_or(ContractError::Overflow)?;
 
     // === Apply vesting if configured
     let vested = apply_vesting_schedule(now, &vesting, payout)?;
@@ -227,8 +227,8 @@ pub(crate) fn claim_stream(env: Env) -> Result<(), ContractError> {
     let vested_fraction = if now >= stream.end_time {
         total
     } else {
-        let elapsed = now - stream.start_time;
-        let duration = stream.end_time - stream.start_time;
+        let elapsed = now.checked_sub(stream.start_time).ok_or(ContractError::Overflow)?;
+        let duration = stream.end_time.checked_sub(stream.start_time).ok_or(ContractError::Overflow)?;
         // Issue #1145: use checked_mul to prevent overflow when total is large
         total
             .checked_mul(elapsed as i128)
@@ -236,7 +236,7 @@ pub(crate) fn claim_stream(env: Env) -> Result<(), ContractError> {
             .unwrap_or(total) // saturate to full total on overflow (extremely rare)
     };
 
-    let claimable = vested_fraction - stream.claimed;
+    let claimable = vested_fraction.checked_sub(stream.claimed).ok_or(ContractError::Overflow)?;
     if claimable <= 0 {
         return Err(ContractError::StreamFullyClaimed);
     }
@@ -251,7 +251,7 @@ pub(crate) fn claim_stream(env: Env) -> Result<(), ContractError> {
         0
     };
 
-    let payout = claimable - fee;
+    let payout = claimable.checked_sub(fee).ok_or(ContractError::Overflow)?;
     token_client.transfer(&env.current_contract_address(), &creator, &payout);
 
     stream.claimed = stream
