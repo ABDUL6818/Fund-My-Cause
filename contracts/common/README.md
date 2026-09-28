@@ -1,14 +1,14 @@
 # `common`
 
 Shared access-control (RBAC) and error-handling primitives for the
-Fund-My-Cause Soroban contracts (`crowdfund`, `achievements`, `registry`).
-The `qf` (quadratic funding) contract is independent and does not use these primitives.
-Extracted per [Issue #834](https://github.com/Fund-My-Cause/Fund-My-Cause/issues/834).
+Fund-My-Cause Soroban contracts (`crowdfund`, `achievements`, `registry`, `qf`).
+All four deployable contracts now depend on this crate. Extracted per
+[Issue #834](https://github.com/Fund-My-Cause/Fund-My-Cause/issues/834).
 
 > **Module boundaries and adoption status:** see
 > [ADR-004 — Soroban contract module boundaries](../../docs/adr/ADR-004-contract-module-boundaries.md).
 > It records, per exported symbol, which contracts actually consume this crate
-> today; why `crowdfund` and `registry` are not consumers; and the
+> today; why `crowdfund` and `registry` originally opted out; and the
 > `CommonError` adoption plan — full migration for `registry`, new-code-only
 > for `crowdfund`. Read it before adding to or migrating onto this crate.
 
@@ -16,14 +16,24 @@ Extracted per [Issue #834](https://github.com/Fund-My-Cause/Fund-My-Cause/issues
 
 - **`CommonError`** (`error.rs`) — a small set of base error variants
   (`Unauthorized`, `NotFound`, `InvalidInput`, `AlreadyInitialized`,
-  `AlreadyExists`) shared across contracts. Each contract keeps its own
-  `#[contracterror] ContractError` — so its domain-specific variants and
-  existing on-chain discriminants are undisturbed — and implements
-  `From<CommonError> for ContractError` to fold these shared cases into its
-  own error space.
+  `AlreadyExists`, `NotInitialized`, `Paused`, `Overflow`) shared across
+  contracts. Each contract keeps its own `#[contracterror] ContractError` — so
+  its domain-specific variants and existing on-chain discriminants are
+  undisturbed — and implements `From<CommonError> for ContractError` to fold
+  these shared cases into its own error space. All four deployable contracts
+  (`crowdfund`, `registry`, `achievements`, `qf`) now implement this.
 - **`AccessControl`** (`access_control.rs`) — the "is the caller the one
   address allowed to do this" check duplicated across contracts
-  (`require_role_auth`).
+  (`require_role_auth`, `require_stored_auth`).
+- **`EventEmitter` / `topics` / `EVENT_SCHEMA_VERSION`** (`events.rs`) —
+  shared event emission helpers so `services/indexer` can parse all contract
+  events uniformly.
+- **`math`** (`math.rs`) — `apply_bps`, `apply_bps_saturating`, `proportional`,
+  `BASIS_POINTS_MAX`, `REWARD_DIVISOR` used by `crowdfund`.
+- **`validation`** (`validation.rs`) — `validate_positive_amount` used by
+  `crowdfund` and `achievements`.
+- **`IssuanceValidator`** (`issuance.rs`) — NFT/achievement issuance checks
+  used by `achievements` and `registry`.
 
 `rbac.rs` (the generic team-RBAC engine described in earlier revisions of
 this README) has been removed (issue #923): it had zero consumers in the
