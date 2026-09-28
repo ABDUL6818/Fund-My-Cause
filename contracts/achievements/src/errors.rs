@@ -55,6 +55,7 @@ impl From<common::CommonError> for ContractError {
             common::CommonError::NotFound => ContractError::KeyNotFound,
             common::CommonError::InvalidInput => ContractError::InvalidMetadata,
             common::CommonError::AlreadyExists => ContractError::AchievementAlreadyUnlocked,
+            common::CommonError::NotInitialized => ContractError::KeyNotFound,
         }
     }
 }

@@ -170,6 +170,7 @@ impl From<common::CommonError> for ContractError {
     /// | `AlreadyInitialized`    | `ContractError::AlreadyInitialized` (1) |
     /// | `AlreadyExists`         | `ContractError::InvalidGoal` (12) — closest generic |
     /// | `InvalidInput`          | `ContractError::InvalidInput` (58) |
+    /// | `NotInitialized`        | `ContractError::InvalidAddress` (70) |
     fn from(err: common::CommonError) -> Self {
         match err {
             common::CommonError::Unauthorized => ContractError::Unauthorized,
@@ -177,6 +178,7 @@ impl From<common::CommonError> for ContractError {
             common::CommonError::AlreadyInitialized => ContractError::AlreadyInitialized,
             common::CommonError::AlreadyExists => ContractError::InvalidGoal,
             common::CommonError::InvalidInput => ContractError::InvalidInput,
+            common::CommonError::NotInitialized => ContractError::InvalidAddress,
         }
     }
 }
