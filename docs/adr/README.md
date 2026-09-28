@@ -36,3 +36,4 @@ You do **not** need an ADR for routine implementation choices (which library to 
 | [ADR-005](./ADR-005-fraud-detection-vs-recommendations-service-split.md) | Keeping `fraud_detection` and `recommendations` as separate services | Proposed |
 | [ADR-006](./ADR-006-unify-frontend-read-paths.md) | Unify Frontend Chain Read Paths via GraphQL API | Proposed |
 | [ADR-007](./ADR-007-stellar-contract-upgrade-strategy.md) | Stellar contract upgrade strategy & state migration | Accepted |
+| [ADR-008](./ADR-008-fraud-detection-scoring-pipeline-design.md) | Fraud-detection scoring pipeline design | Accepted |
