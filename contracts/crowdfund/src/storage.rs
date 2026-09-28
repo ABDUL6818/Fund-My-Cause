@@ -7,6 +7,27 @@ use soroban_sdk::Symbol;
 /// (the enum itself is defined in the `types` module).
 pub use crate::types::DataKey;
 
+/// Canonical metadata storage key variants. Keeping them in one place avoids
+/// drift between metadata accessors and the rest of the contract.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum MetadataField {
+    Title,
+    Description,
+    SocialLinks,
+    History,
+    IpfsCid,
+}
+
+pub fn metadata_field_key(field: MetadataField) -> Symbol {
+    match field {
+        MetadataField::Title => soroban_sdk::symbol_short!("TITLE"),
+        MetadataField::Description => soroban_sdk::symbol_short!("DESC"),
+        MetadataField::SocialLinks => soroban_sdk::symbol_short!("SOCIAL"),
+        MetadataField::History => soroban_sdk::symbol_short!("METAHIST"),
+        MetadataField::IpfsCid => soroban_sdk::symbol_short!("IPFSCID"),
+    }
+}
+
 /// Contract version for upgrades and compatibility tracking
 pub const CONTRACT_VERSION: u32 = 6;
 
@@ -163,9 +184,6 @@ pub const KEY_YIELD_CONFIG: Symbol = soroban_sdk::symbol_short!("YLDCFG");
 pub const KEY_YIELD_TOTAL: Symbol = soroban_sdk::symbol_short!("YLDTOT");
 
 // ── Issue #929: Magic Number Constants ───────────────────────────────────────
-/// Basis points denominator (10,000 basis points = 100%).
-/// Used in fee calculations: fee = amount * fee_bps / BASIS_POINTS_MAX
-pub const BASIS_POINTS_MAX: i128 = 10_000;
 
 /// Maximum message length (characters) for contribution messages.
 /// Validated when storing contribution messages to prevent unbounded storage.
@@ -175,6 +193,30 @@ pub const MAX_MESSAGE_LENGTH: u32 = 256;
 /// Used to extend time-to-live for frequently accessed per-contributor data.
 /// Value represents 100 ledger entries worth of extension.
 pub const TTL_PERSISTENT_ENTRY: u32 = 100;
+
+#[cfg(test)]
+mod tests {
+    use super::{metadata_field_key, MetadataField};
+
+    #[test]
+    fn metadata_storage_keys_are_unique() {
+        let keys = [
+            metadata_field_key(MetadataField::Title),
+            metadata_field_key(MetadataField::Description),
+            metadata_field_key(MetadataField::SocialLinks),
+            metadata_field_key(MetadataField::History),
+            metadata_field_key(MetadataField::IpfsCid),
+        ];
+
+        for (idx, lhs) in keys.iter().enumerate() {
+            for (other_idx, rhs) in keys.iter().enumerate() {
+                if idx != other_idx {
+                    assert_ne!(*lhs, *rhs, "metadata storage keys must remain unique");
+                }
+            }
+        }
+    }
+}
 
 /// TTL extension value for instance storage (short-term, in ledger entries).
 /// Used for frequent writes to campaign-wide state (e.g., totals, counts).

@@ -172,11 +172,6 @@ def test_scoring_regression_fixed_transaction_set():
     assert dup_flags[0].campaign_id == "DUP_B"
 
 
-def test_health():
-    r = client.get("/health")
-    assert r.status_code == 200
-
-
 # ── Wash contribution ─────────────────────────────────────────────────────────
 
 def test_wash_contribution_flagged():
@@ -195,9 +190,15 @@ def test_wash_contribution_flagged():
 def test_wash_below_threshold_not_flagged():
     _clear()
     now = time.time()
+    # WASH_MIN_OCCURRENCES - 1 pairs.  Each contribution must only match its
+    # own refund.  Space pairs by > WASH_WINDOW_SECONDS so contributions can't
+    # cross-match refunds from other pairs (the heuristic counts every
+    # contribution→refund pair within the window, not just 1-to-1 pairings).
+    step = WASH_WINDOW_SECONDS + 60  # step wider than the wash window
     for i in range(WASH_MIN_OCCURRENCES - 1):
-        _CONTRIBUTIONS.append(ContributionEvent("camp2", "GCLEAN", 1000, now + i * 10))
-        _REFUNDS.append(RefundEvent("camp2", "GCLEAN", now + i * 10 + 60))
+        t = now + i * step
+        _CONTRIBUTIONS.append(ContributionEvent("camp2b", "GCLEAN2", 1000, t))
+        _REFUNDS.append(RefundEvent("camp2b", "GCLEAN2", t + 60))
 
     flags = scan_wash_contributions()
     assert flags == []

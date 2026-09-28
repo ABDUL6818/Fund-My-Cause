@@ -4,7 +4,7 @@ Unit tests for shared_math_utils module.
 
 import math
 import pytest
-from shared_math_utils import (
+from .shared_math_utils import (
     jaccard_similarity,
     normalize,
     weighted_score,

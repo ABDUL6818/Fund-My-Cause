@@ -31,6 +31,21 @@ Dead-code audit (#900)
 No feature-flag conditionals, no versioned-model dispatch.
 See tests_pipeline.py → test_no_dead_feature_flag_branches.
 
+Idempotency keys (#1203)
+────────────────────────
+``POST /contributions`` now supports client-side idempotency.  Callers MUST
+include an ``Idempotency-Key`` header whose value is a UUID or equivalent
+unique string.  If the same key is presented within the TTL window
+(``IDEMPOTENCY_TTL_SECONDS``, default 86 400 — 24 hours) the request is
+treated as a duplicate and the original ``202 Accepted`` response is
+re-returned immediately without re-processing the payload.
+
+Duplicate detection is implemented with an in-memory LRU store backed by a
+``dict`` and a ``deque`` expiry queue.  Production deployments should replace
+the store with a Redis ``SET key value EX ttl NX`` call via
+``IdempotencyStore.get`` / ``IdempotencyStore.set`` (the interface is the
+same).
+
 Trace-ID propagation
 ────────────────────
 Every inbound HTTP request carries ``X-Trace-ID``.  TraceIDMiddleware
@@ -46,17 +61,18 @@ import os
 import re
 import sys
 import time
-from contextlib import asynccontextmanager
+from collections import deque
 from contextvars import ContextVar
 from dataclasses import dataclass, field
-from typing import AsyncIterator, Callable, Optional
+from enum import Enum
+from typing import Callable, Deque, Dict, Optional, Tuple
 
 import structlog
 from fastapi import FastAPI, BackgroundTasks, Request, Response
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 
-from shared_math_utils import jaccard_similarity
+from backend.shared.shared_math_utils import jaccard_similarity
 
 # ---------------------------------------------------------------------------
 # Shared DB pool config (#1128) — see backend/shared/db_config.py. Neither
@@ -211,7 +227,101 @@ class TraceIDMiddleware(BaseHTTPMiddleware):
 
 
 # ---------------------------------------------------------------------------
-# Scoring queue (#904)
+# Tuneable thresholds (see docs/fraud-detection-heuristics.md for rationale)
+# ---------------------------------------------------------------------------
+WASH_WINDOW_SECONDS = 3600          # contributions that refund within 1 h
+WASH_MIN_OCCURRENCES = 3            # flag after 3 wash cycles
+SPIKE_WINDOW_SECONDS = 600          # 10-minute rolling window
+SPIKE_MAX_CONTRIBUTIONS = 50        # > 50 contributions in 10 min → spike
+DUPLICATE_JACCARD_THRESHOLD = 0.8   # titles ≥ 80 % token overlap → duplicate
+
+# ---------------------------------------------------------------------------
+# Idempotency key support (#1203)
+# ---------------------------------------------------------------------------
+
+#: Header callers must supply to opt in to idempotency.
+IDEMPOTENCY_KEY_HEADER = "idempotency-key"
+
+#: How long (seconds) a key is retained before expiring.  Duplicate requests
+#: arriving after this window are treated as new requests.
+IDEMPOTENCY_TTL_SECONDS: int = 86_400  # 24 hours
+
+#: Maximum key length to accept (guards against oversized header attacks).
+IDEMPOTENCY_KEY_MAX_LEN = 256
+
+
+class IdempotencyStore:
+    """
+    In-memory TTL store for idempotency keys.
+
+    Keys are stored with their expiry timestamp.  An expiry queue (deque)
+    lets the store prune expired keys lazily on each ``get`` / ``set`` call so
+    memory doesn't grow unboundedly in long-running processes.
+
+    Thread-safety: this implementation is safe for single-threaded asyncio
+    event loops (standard FastAPI / uvicorn usage).  For multi-worker
+    deployments replace ``get`` / ``set`` with Redis ``SET … NX EX`` calls.
+    """
+
+    def __init__(self, ttl_seconds: int = IDEMPOTENCY_TTL_SECONDS) -> None:
+        self._ttl = ttl_seconds
+        # key → (stored_at, response_body)
+        self._store: Dict[str, Tuple[float, dict]] = {}
+        # (expiry_timestamp, key) ordered oldest → newest
+        self._expiry_queue: Deque[Tuple[float, str]] = deque()
+
+    # ------------------------------------------------------------------
+    def _evict_expired(self) -> None:
+        """Remove keys whose TTL has elapsed."""
+        now = time.time()
+        while self._expiry_queue and self._expiry_queue[0][0] <= now:
+            _expiry, key = self._expiry_queue.popleft()
+            # Only delete if the stored entry is indeed expired (a retry
+            # from a legitimate re-send would have refreshed it).
+            entry = self._store.get(key)
+            if entry and entry[0] + self._ttl <= now:
+                del self._store[key]
+
+    # ------------------------------------------------------------------
+    def get(self, key: str) -> Optional[dict]:
+        """
+        Return the cached response body for *key*, or ``None`` if not found /
+        expired.
+        """
+        self._evict_expired()
+        entry = self._store.get(key)
+        if entry is None:
+            return None
+        stored_at, body = entry
+        if time.time() - stored_at > self._ttl:
+            del self._store[key]
+            return None
+        return body
+
+    # ------------------------------------------------------------------
+    def set(self, key: str, body: dict) -> None:
+        """Persist *body* under *key* for TTL seconds."""
+        self._evict_expired()
+        now = time.time()
+        self._store[key] = (now, body)
+        self._expiry_queue.append((now + self._ttl, key))
+
+    # ------------------------------------------------------------------
+    def __len__(self) -> int:
+        """Return the number of non-expired keys currently stored."""
+        now = time.time()
+        return sum(
+            1 for stored_at, _ in self._store.values()
+            if now - stored_at <= self._ttl
+        )
+
+
+#: Module-level singleton — shared by all requests within the same process.
+_IDEMPOTENCY_STORE = IdempotencyStore()
+
+
+# ---------------------------------------------------------------------------
+# Domain types
 # ---------------------------------------------------------------------------
 
 SCORING_QUEUE_MAXSIZE = 1000
@@ -353,11 +463,6 @@ app = FastAPI(
 app.add_middleware(TraceIDMiddleware)
 
 
-@app.get("/health")
-def health() -> dict:
-    return {"status": "ok"}
-
-
 @app.get("/healthz")
 def healthz() -> dict:
     return {"status": "ok", "timestamp": time.time()}
@@ -378,11 +483,46 @@ async def ingest_contribution(request: Request) -> JSONResponse:
     Accept a contribution notification from graphql-api and enqueue it for
     async fraud scoring.
 
-    Returns:
-      200 {"status": "queued", "queue_depth": N}  – job enqueued successfully
-      503 {"error": "queue_full"}                  – queue at capacity; retry later
-      422 {"error": "invalid payload"}             – malformed request body
+    Idempotency
+    ───────────
+    Callers SHOULD supply an ``Idempotency-Key`` header (any opaque string up
+    to 256 characters — typically a UUID v4).  When the same key is seen again
+    within ``IDEMPOTENCY_TTL_SECONDS`` (24 h by default) the endpoint returns
+    the original response immediately without re-processing the payload.
+
+    Requests without an ``Idempotency-Key`` header are processed normally but
+    receive no duplicate protection.
+
+    Status codes
+    ────────────
+    202 – accepted (first time or key not provided)
+    202 – duplicate detected, original response returned
+    400 – idempotency key exceeds maximum length
+    422 – malformed JSON body
     """
+    # ── 1. Validate idempotency key (if provided) ────────────────────────────
+    idempotency_key: Optional[str] = request.headers.get(IDEMPOTENCY_KEY_HEADER)
+
+    if idempotency_key is not None:
+        if len(idempotency_key) > IDEMPOTENCY_KEY_MAX_LEN:
+            log.warning(
+                "contributions_idempotency_key_too_long",
+                key_length=len(idempotency_key),
+            )
+            return JSONResponse(
+                status_code=400,
+                content={"error": "Idempotency-Key exceeds maximum length"},
+            )
+
+        cached = _IDEMPOTENCY_STORE.get(idempotency_key)
+        if cached is not None:
+            log.info(
+                "contributions_duplicate_rejected",
+                idempotency_key=idempotency_key,
+            )
+            return JSONResponse(status_code=202, content=cached)
+
+    # ── 2. Parse and validate the request body ───────────────────────────────
     try:
         body = await request.json()
         payload = ContributionPayload(**body)
@@ -390,20 +530,7 @@ async def ingest_contribution(request: Request) -> JSONResponse:
         log.warning("contributions_ingest_invalid_payload", error=str(exc))
         return JSONResponse(status_code=422, content={"error": "invalid payload"})
 
-    try:
-        _scoring_queue.put_nowait(ScoringJob(payload=payload))
-    except asyncio.QueueFull:
-        log.warning(
-            "scoring_queue_full",
-            campaign_id=payload.campaignId,
-            queue_depth=_scoring_queue.qsize(),
-        )
-        return JSONResponse(
-            status_code=503,
-            content={"error": "queue_full", "queue_depth": _scoring_queue.qsize()},
-        )
-
-    queue_depth = _scoring_queue.qsize()
+    # ── 3. Process the contribution ──────────────────────────────────────────
     log.info(
         "contribution_queued",
         campaign_id=payload.campaignId,
@@ -412,7 +539,27 @@ async def ingest_contribution(request: Request) -> JSONResponse:
         tx_hash=payload.transactionHash,
         queue_depth=queue_depth,
     )
-    return JSONResponse(content={"status": "queued", "queue_depth": queue_depth})
+
+    _CONTRIBUTIONS.append(ContributionEvent(
+        campaign_id=payload.campaignId,
+        wallet=payload.contributor,
+        amount=int(payload.amount) if payload.amount.isdigit() else 0,
+        timestamp=payload.timestamp,
+    ))
+
+    log.debug("contribution_stored", store_size=len(_CONTRIBUTIONS))
+
+    response_body = {"status": "accepted"}
+
+    # ── 4. Persist idempotency key so retries are short-circuited ────────────
+    if idempotency_key is not None:
+        _IDEMPOTENCY_STORE.set(idempotency_key, response_body)
+        log.debug(
+            "contributions_idempotency_key_stored",
+            idempotency_key=idempotency_key,
+        )
+
+    return JSONResponse(status_code=202, content=response_body)
 
 
 @app.post("/scan")

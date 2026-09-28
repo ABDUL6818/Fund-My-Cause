@@ -4,19 +4,11 @@ import pino from "pino";
 import { SorobanRPCClient } from "./rpc-client.js";
 import { HealthChecker } from "./health-checker.js";
 import { EventStore } from "./event-store.js";
-import { EventStoreRepository } from "./repository-impl.js";
-import { runMigrations } from "./migrations/run-migrations.js";
 import {
-  CampaignHandler,
-  DonationHandler,
-  AchievementHandler,
-  RegisteredHandler,
-  EventDispatcher,
-} from "./handlers/index.js";
-import type { EventHandler } from "./handlers/index.js";
-import type { EventRepository } from "./repository.js";
-import { loadStoreConfig } from "./store-config.js";
-import { loadDbPoolConfig } from "@fund-my-cause/shared-utils";
+  buildPage,
+  resolvePaginationArgs,
+  CursorDecodeError,
+} from "@fund-my-cause/shared-utils";
 
 // Environment variables
 const PORT = parseInt(process.env.PORT ?? "3001", 10);
@@ -183,21 +175,50 @@ app.get("/ready", (req, res) => {
   }
 });
 
-// Events query endpoint — uses EventRepository interface
+// Events query endpoint — supports cursor-based and offset-based pagination
+// via the shared pagination utilities.
+//
+// Query params:
+//   contractId  filter by contract ID
+//   type        filter by event type
+//   limit       max items per page (default 100, max 200)
+//   offset      zero-based offset (default 0)
+//   after       opaque cursor from a previous response (overrides offset)
 app.get("/events", (req, res) => {
-  const { contractId, type, limit = "100" } = req.query;
-  const limitNum = Math.min(parseInt(limit as string, 10) || 100, 1000);
+  const { contractId, type, limit: rawLimit, offset: rawOffset, after } = req.query;
 
-  let events = [];
-  if (contractId) {
-    events = eventRepository.queryByContract(contractId as string, limitNum);
-  } else if (type) {
-    events = eventRepository.queryByType(type as string, limitNum);
-  } else {
-    events = eventRepository.getAllEvents(limitNum);
+  let pagination: { limit: number; offset: number };
+  try {
+    pagination = resolvePaginationArgs({
+      limit: rawLimit !== undefined ? parseInt(rawLimit as string, 10) : 100,
+      offset: rawOffset !== undefined ? parseInt(rawOffset as string, 10) : 0,
+      after: after as string | undefined,
+    });
+  } catch (err) {
+    if (err instanceof CursorDecodeError) {
+      res.status(400).json({ error: err.message });
+      return;
+    }
+    throw err;
   }
 
-  res.json({ count: events.length, events });
+  const { limit, offset } = pagination;
+
+  // Fetch all matching events, then apply pagination.
+  let allEvents: ReturnType<typeof eventStore.getAllEvents>;
+  if (contractId) {
+    allEvents = eventStore.queryByContract(contractId as string, Infinity as unknown as number);
+  } else if (type) {
+    allEvents = eventStore.queryByType(type as string, Infinity as unknown as number);
+  } else {
+    allEvents = eventStore.getAllEvents(Infinity as unknown as number);
+  }
+
+  const totalCount = allEvents.length;
+  const pageItems = allEvents.slice(offset, offset + limit);
+  const page = buildPage(pageItems, offset, limit, totalCount);
+
+  res.json(page);
 });
 
 // Stats endpoint — uses EventRepository interface

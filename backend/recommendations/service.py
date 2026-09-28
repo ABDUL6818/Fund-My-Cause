@@ -296,11 +296,6 @@ app = FastAPI(title="Fund-My-Cause Recommendation Service", version="1.0.0")
 app.add_middleware(TraceIDMiddleware)
 
 
-@app.get("/health")
-def health() -> dict:
-    return {"status": "ok"}
-
-
 @app.get("/healthz")
 def healthz() -> dict:
     return {"status": "ok", "timestamp": time.time()}

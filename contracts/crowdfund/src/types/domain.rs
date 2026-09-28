@@ -130,10 +130,10 @@ pub struct CampaignUpdate {
     pub timestamp: u64,
 }
 
-/// Milestone tracking for campaigns.
+/// Funding milestone tracking for campaigns.
 #[derive(Clone)]
 #[contracttype]
-pub struct Milestone {
+pub struct FundingMilestone {
     /// Target amount in stroops
     pub amount: i128,
     /// Milestone description
@@ -269,13 +269,13 @@ pub struct RewardTier {
     pub description: String,
 }
 
-/// An immutable record of a single contribution.
+/// Per-contributor running history of contributions.
 ///
 /// Appended to each contributor's persistent history every time they call
 /// [`contribute`](crate::CrowdfundContract::contribute).
 #[derive(Clone)]
 #[contracttype]
-pub struct ContributionRecord {
+pub struct ContributionHistory {
     /// Amount transferred in this contribution (in stroops)
     pub amount: i128,
     /// Ledger timestamp at the moment the contribution was accepted

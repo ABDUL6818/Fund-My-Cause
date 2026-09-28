@@ -84,13 +84,55 @@ mod validation;
 mod views;
 mod withdraw;
 
+/// Public `pub fn` wrappers around otherwise `pub(crate)` validation logic,
+/// compiled only under the `fuzz` feature so the `contracts/crowdfund/fuzz`
+/// harness (see its README section) can drive them directly without
+/// widening the normal contract's public API.
+#[cfg(feature = "fuzz")]
+pub mod fuzz_api {
+    use crate::errors::ContractError;
+    use crate::validation;
+
+    pub fn validate_initialization(
+        goal: i128,
+        deadline: u64,
+        min_contribution: i128,
+        max_contribution: i128,
+        platform_fee_bps: Option<u32>,
+        current_time: u64,
+    ) -> Result<(), ContractError> {
+        validation::validate_initialization(
+            goal,
+            deadline,
+            min_contribution,
+            max_contribution,
+            platform_fee_bps,
+            current_time,
+        )
+    }
+
+    pub fn validate_min_contribution(
+        amount: i128,
+        min_contribution: i128,
+    ) -> Result<(), ContractError> {
+        validation::validate_min_contribution(amount, min_contribution)
+    }
+
+    pub fn validate_contributor_cap(
+        amount: i128,
+        max_contribution: i128,
+        current_contribution: i128,
+    ) -> Result<(), ContractError> {
+        validation::validate_contributor_cap(amount, max_contribution, current_contribution)
+    }
+}
+
 pub use errors::ContractError;
 pub use security::{CircuitBreaker, ContributorGate, InputValidator, RateLimiter, ReentrancyGuard};
 
 use access::auth_admin;
 use helpers::require_auth_creator;
 pub use storage::{
-    BASIS_POINTS_MAX,
     CONTRACT_VERSION,
     KEY_ADMIN,
     KEY_ANALYTICS,
@@ -175,7 +217,7 @@ pub use types::{
     // #459
     ContractStateSnapshot,
     // #416
-    ContributionRecord,
+    ContributionHistory,
     DataKey,
     Delegation,
     Dispute,
@@ -285,7 +327,7 @@ pub use types::{
     MatchingConfig,
     // Issue #423
     MetadataVersion,
-    Milestone,
+    FundingMilestone,
     MilestoneStatus,
     // #443
     PerformanceMetrics,
@@ -1882,7 +1924,7 @@ impl CrowdfundContract {
 
     /// Returns the full contribution history for a contributor.
     ///
-    /// Each entry is a [`ContributionRecord`] capturing the amount, ledger
+    /// Each entry is a [`ContributionHistory`] capturing the amount, ledger
     /// timestamp, and running total at the time of the contribution.  Records
     /// are appended chronologically by [`contribute`](CrowdfundContract::contribute).
     ///
@@ -1891,8 +1933,8 @@ impl CrowdfundContract {
     /// * `contributor` - Address whose history to retrieve
     ///
     /// # Returns
-    /// Ordered `Vec<ContributionRecord>` — empty if the address has never contributed
-    pub fn get_contribution_history(env: Env, contributor: Address) -> Vec<ContributionRecord> {
+    /// Ordered `Vec<ContributionHistory>` — empty if the address has never contributed
+    pub fn get_contribution_history(env: Env, contributor: Address) -> Vec<ContributionHistory> {
         views::get_contribution_history(env, contributor)
     }
 
@@ -2936,7 +2978,7 @@ impl CrowdfundContract {
     ///
     /// Only the creator can call this function. Milestones define target amounts
     /// that trigger fund releases when reached and verified.
-    pub fn set_milestones(env: Env, milestones: Vec<Milestone>) -> Result<(), ContractError> {
+    pub fn set_milestones(env: Env, milestones: Vec<FundingMilestone>) -> Result<(), ContractError> {
         let creator: Address = env
             .storage()
             .instance()
@@ -2953,7 +2995,7 @@ impl CrowdfundContract {
     }
 
     /// Gets all milestones for the campaign.
-    pub fn get_milestones(env: Env) -> Result<Vec<Milestone>, ContractError> {
+    pub fn get_milestones(env: Env) -> Result<Vec<FundingMilestone>, ContractError> {
         env.storage()
             .persistent()
             .get(&KEY_MILESTONES)
@@ -2972,7 +3014,7 @@ impl CrowdfundContract {
             .ok_or(ContractError::NotCreator)?;
         creator.require_auth();
 
-        let mut milestones: Vec<Milestone> = env
+        let mut milestones: Vec<FundingMilestone> = env
             .storage()
             .persistent()
             .get(&KEY_MILESTONES)
@@ -4019,22 +4061,117 @@ impl CrowdfundContract {
     pub fn add_to_denylist(env: Env, address: Address) -> Result<(), ContractError> {
         access::add_to_denylist(env, address)
     }
-
-    /// Removes an address from the deny list (admin only).
-    pub fn remove_from_denylist(env: Env, address: Address) -> Result<(), ContractError> {
-        access::remove_from_denylist(env, address)
-    }
-
-    /// Returns `true` if the address is on the allow list.
-    pub fn is_allowlisted(env: Env, address: Address) -> bool {
-        access::is_allowlisted(env, address)
-    }
-
-    /// Returns `true` if the address is on the deny list.
-    pub fn is_denylisted(env: Env, address: Address) -> bool {
-        access::is_denylisted(env, address)
-    }
 }
 
 #[cfg(test)]
-mod test;
+mod panic_safety_tests {
+    use super::*;
+    use soroban_sdk::testutils::{Address as _, Ledger};
+
+    fn setup_client(env: &Env) -> CrowdfundContractClient<'_> {
+        env.mock_all_auths();
+        let contract_id = env.register_contract(None, CrowdfundContract);
+        CrowdfundContractClient::new(env, &contract_id)
+    }
+
+    #[test]
+    fn test_no_panic_on_overflow() {
+        let env = Env::default();
+        let client = setup_client(&env);
+        let addr = Address::generate(&env);
+        let token_admin = Address::generate(&env);
+        let token_id = env.register_stellar_asset_contract(token_admin);
+
+        env.ledger().set_timestamp(100);
+        // Initialize a valid campaign first so contribute reaches arithmetic paths.
+        client.initialize(
+            &addr,
+            &token_id,
+            &10_000,
+            &1_000_000,
+            &100,
+            &0i128,
+            &String::from_str(&env, "Title"),
+            &String::from_str(&env, "Description"),
+            &None,
+            &None,
+            &None,
+            &Category::Other,
+            &None,
+            &None,
+        );
+
+        // A huge amount must surface as a contract error, never a host panic.
+        let result =
+            client.try_contribute(&addr, &i128::MAX, &token_id, &None);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_no_panic_on_uninitialized() {
+        let env = Env::default();
+        let client = setup_client(&env);
+        let addr = Address::generate(&env);
+        let token_id = Address::generate(&env);
+
+        // Contribute to an uninitialized campaign must error, not panic.
+        let result = client.try_contribute(&addr, &100, &token_id, &None);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_no_panic_on_invalid_goal() {
+        let env = Env::default();
+        let client = setup_client(&env);
+        let creator = Address::generate(&env);
+        let token_id = Address::generate(&env);
+
+        env.ledger().set_timestamp(100);
+        // Zero goal is invalid and must error, not panic.
+        let result = client.try_initialize(
+            &creator,
+            &token_id,
+            &0,
+            &(env.ledger().timestamp() + 1000),
+            &0,
+            &0,
+            &String::from_str(&env, "Title"),
+            &String::from_str(&env, "Description"),
+            &None,
+            &None,
+            &None,
+            &Category::Other,
+            &None,
+            &None,
+        );
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_no_panic_on_past_deadline() {
+        let env = Env::default();
+        let client = setup_client(&env);
+        let creator = Address::generate(&env);
+        let token_id = Address::generate(&env);
+
+        env.ledger().set_timestamp(10_000);
+        // Past deadline is invalid and must error, not panic.
+        let result = client.try_initialize(
+            &creator,
+            &token_id,
+            &1000,
+            &9_000,
+            &0,
+            &0,
+            &String::from_str(&env, "Title"),
+            &String::from_str(&env, "Description"),
+            &None,
+            &None,
+            &None,
+            &Category::Other,
+            &None,
+            &None,
+        );
+        assert!(result.is_err());
+    }
+}

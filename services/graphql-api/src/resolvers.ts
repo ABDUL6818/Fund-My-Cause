@@ -3,7 +3,6 @@ import type { IResolvers } from "@graphql-tools/utils";
 import {
   CAMPAIGN_STATUS_VALUES,
   type CampaignStatus,
-  validateCampaignInput,
   validateDonationAmount,
   XLM_TO_STROOPS,
 } from "@fund-my-cause/types";
@@ -12,12 +11,10 @@ import { CacheService } from "./services/cache.js";
 import { ContractService } from "./services/contract.js";
 import { PubSubService } from "./services/pubsub.js";
 import { notifyContribution } from "./services/fraud-client.js";
-import type { MutationName } from "./services/rate-limiter.js";
 import {
-  buildPage,
-  decodeCursor,
-  CursorError,
-} from "./services/cursor-pagination.js";
+  buildConnection,
+  resolvePaginationArgs,
+} from "@fund-my-cause/shared-utils";
 
 /**
  * Maps the public GraphQL schema's SCREAMING_CASE enum names (schema.ts)
@@ -115,45 +112,18 @@ export const resolvers: IResolvers<any, Context> = {
 
     async campaigns(
       _,
-      { filter, first, after, pagination = { limit: 20, offset: 0 }, sort },
-      context: Context,
+      { filter, pagination = {}, sort },
+      context: Context
     ) {
-      // ---------------------------------------------------------------------------
-      // Resolve effective page size and offset.
-      //
-      // Cursor args (first / after) take precedence over the legacy offset-based
-      // PaginationInput.  When a cursor is supplied we decode it to extract the
-      // last-seen sortKey so the database layer can apply a keyset filter.
-      // ---------------------------------------------------------------------------
-      const pageSize = first ?? pagination.limit ?? 20;
-      const clampedSize = Math.max(1, Math.min(pageSize, 100));
+      // Resolve pagination args through shared utility (handles defaults,
+      // clamping, and cursor → offset decoding in one place).
+      const { limit, offset } = resolvePaginationArgs({
+        limit: pagination.limit ?? 20,
+        offset: pagination.offset ?? 0,
+        after: pagination.after,
+      });
 
-      // Decode the `after` cursor if provided.  An invalid cursor is a client
-      // error — surface it as a BAD_USER_INPUT so the caller gets a clear message.
-      let afterSortKey: string | undefined;
-      let afterId: string | undefined;
-      if (after) {
-        try {
-          const decoded = decodeCursor(after);
-          afterSortKey = decoded.sortKey;
-          afterId = decoded.id;
-        } catch (err) {
-          if (err instanceof CursorError) {
-            throw new GraphQLError(
-              `Invalid pagination cursor: ${err.message}`,
-              {
-                extensions: { code: "BAD_USER_INPUT" },
-              },
-            );
-          }
-          throw err;
-        }
-      }
-
-      // Use offset from legacy input when no cursor is present.
-      const legacyOffset = after ? 0 : (pagination.offset ?? 0);
-
-      const cacheKey = `campaigns:${JSON.stringify({ filter, first: clampedSize, after, legacyOffset, sort })}`;
+      const cacheKey = `campaigns:${JSON.stringify({ filter, limit, offset, sort })}`;
       const cached = await context.cache.get(cacheKey);
 
       if (cached) {
@@ -164,29 +134,14 @@ export const resolvers: IResolvers<any, Context> = {
       // COUNT query.  This is the standard "fetch N+1" cursor-pagination trick.
       const campaigns = await context.contractService.getCampaigns({
         filter,
-        pagination: { limit: clampedSize + 1, offset: legacyOffset },
+        pagination: { limit, offset },
         sort,
       });
 
-      const hasNextPage = campaigns.length > clampedSize;
-      const hasPreviousPage = after ? true : legacyOffset > 0;
-      const pageItems: Campaign[] = campaigns.slice(0, clampedSize);
+      const totalCount = await context.contractService.getCampaignCount(filter);
 
-      // Build cursor-paginated response using the cursor-pagination service.
-      // Sort key is createdAt (ISO string) which gives stable ordering;
-      // the opaque id ties-breaks duplicate timestamps.
-      const pageResult = buildPage(
-        pageItems,
-        (c) => c.id,
-        (c) => c.createdAt,
-        hasNextPage,
-        hasPreviousPage,
-      );
-
-      const result = {
-        ...pageResult,
-        totalCount: await context.contractService.getCampaignCount(filter),
-      };
+      // buildConnection encodes cursors and computes pageInfo from shared logic.
+      const result = buildConnection(campaigns, offset, limit, totalCount);
 
       await context.cache.set(cacheKey, result, 600); // Cache for 10 minutes
       return result;
@@ -281,7 +236,11 @@ export const resolvers: IResolvers<any, Context> = {
       return context.dataLoader.contributions.load(id);
     },
 
-    async contributions(_, { campaignId, contributor, first, after }, context: Context) {
+    async contributions(
+      _,
+      { campaignId, contributor, first, after },
+      context: Context,
+    ) {
       const pageSize = first ?? 20;
       const clampedSize = Math.max(1, Math.min(pageSize, 100));
 
@@ -307,10 +266,12 @@ export const resolvers: IResolvers<any, Context> = {
 
       let items: any[] = [];
       if (campaignId) {
-        const allContributions = await context.dataLoader.campaignContributions.load(campaignId);
+        const allContributions =
+          await context.dataLoader.campaignContributions.load(campaignId);
         items = allContributions || [];
       } else if (contributor) {
-        const allContributions = await context.dataLoader.userContributions.load(contributor);
+        const allContributions =
+          await context.dataLoader.userContributions.load(contributor);
         items = allContributions || [];
       } else {
         throw new GraphQLError(
@@ -434,7 +395,9 @@ export const resolvers: IResolvers<any, Context> = {
         }
       }
 
-      const allCampaigns = await context.dataLoader.userCampaigns.load(user.address);
+      const allCampaigns = await context.dataLoader.userCampaigns.load(
+        user.address,
+      );
       let items = allCampaigns || [];
 
       if (afterSortKey && afterId) {
@@ -481,7 +444,9 @@ export const resolvers: IResolvers<any, Context> = {
         }
       }
 
-      const allContributions = await context.dataLoader.userContributions.load(user.address);
+      const allContributions = await context.dataLoader.userContributions.load(
+        user.address,
+      );
       let items = allContributions || [];
 
       if (afterSortKey && afterId) {
@@ -561,6 +526,9 @@ export const resolvers: IResolvers<any, Context> = {
   // Mutation resolvers
   Mutation: {
     async authenticate(_, { signature, message, address }, context: Context) {
+      // Validate input
+      validateAuthenticateInput({ signature, message, address });
+
       const verified = await context.contractService.verifySignature(
         address,
         message,
@@ -585,21 +553,11 @@ export const resolvers: IResolvers<any, Context> = {
         throw new GraphQLError("Authentication required");
       }
 
+      // Validate input using middleware
+      validateCreateCampaignInput(input);
+
       // Rate-limit: 5 campaign creations per wallet per hour (#899)
       await enforceMutationRateLimit("createCampaign", context);
-
-      const validationErrors = validateCampaignInput({
-        title: input.title,
-        description: input.description,
-        goal: input.goal?.toString() ?? "",
-        deadline: input.deadline,
-        minContribution: input.minContribution?.toString() ?? "",
-      });
-      if (Object.keys(validationErrors).length > 0) {
-        throw new GraphQLError("Invalid campaign input", {
-          extensions: { code: "BAD_USER_INPUT", validationErrors },
-        });
-      }
 
       const campaign = await context.contractService.createCampaign(
         context.user,
@@ -617,6 +575,9 @@ export const resolvers: IResolvers<any, Context> = {
       if (!context.user) {
         throw new GraphQLError("Authentication required");
       }
+
+      // Validate input using middleware
+      validateUpdateCampaignInput(input);
 
       const campaign = await context.contractService.updateCampaign(
         id,
@@ -640,18 +601,11 @@ export const resolvers: IResolvers<any, Context> = {
         throw new GraphQLError("Authentication required");
       }
 
+      // Validate input using middleware
+      validateRecordContributionInput(input);
+
       // Rate-limit: 20 contributions per wallet per 10 minutes (#899)
       await enforceMutationRateLimit("recordContribution", context);
-
-      const amountXlm = input.amount
-        ? (Number(input.amount) / Number(XLM_TO_STROOPS)).toString()
-        : "0";
-      const amountError = validateDonationAmount(amountXlm);
-      if (amountError) {
-        throw new GraphQLError(amountError, {
-          extensions: { code: "BAD_USER_INPUT" },
-        });
-      }
 
       const { traceId, log } = context;
 

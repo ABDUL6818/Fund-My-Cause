@@ -2,6 +2,12 @@
 
 Off-chain indexer service for Fund-My-Cause. Ingests Soroban contract events and provides fast queries via REST API.
 
+## Reconciliation Strategy
+
+Reorg handling and duplicate-event idempotency are documented in
+[RECONCILIATION.md](./RECONCILIATION.md). Per-event-type processor
+architecture is documented in [PROCESSOR_REGISTRY.md](./PROCESSOR_REGISTRY.md).
+
 ## Quick Start
 
 ### Environment Variables

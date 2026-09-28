@@ -24,6 +24,8 @@ use crate::{
     validation::validate_deadline_passed,
 };
 
+use common::math::apply_bps;
+
 // === Shared helpers
 
 /// Transfers the platform fee out of the campaign balance and returns the fee taken.
@@ -44,11 +46,7 @@ fn deduct_platform_fee(
             if respect_fee_mode && config.fee_mode == FeeMode::OnContribution {
                 0
             } else {
-                // Issue #1145: use checked_mul to prevent overflow on large base amounts
-                let fee = base
-                    .checked_mul(config.fee_bps as i128)
-                    .and_then(|v| v.checked_div(10_000))
-                    .unwrap_or(0);
+                let fee = apply_bps(base, config.fee_bps).unwrap_or(0);
                 token_client.transfer(&env.current_contract_address(), &config.address, &fee);
                 fee
             }
