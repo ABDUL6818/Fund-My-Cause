@@ -382,3 +382,6 @@ Fund-My-Cause is powered by the Stellar network and Soroban smart contracts. Ste
 
 <!-- handsoff-issue-1350 -->
 - #1350: [Frontend] Split app/campaigns page into focused container/presentational components
+
+<!-- handsoff-issue-1351 -->
+- #1351: [Frontend] Consolidate duplicate data-fetching logic in src/services and src/lib/graphql
