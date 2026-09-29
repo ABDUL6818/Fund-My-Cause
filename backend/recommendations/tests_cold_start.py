@@ -439,3 +439,172 @@ class TestEmptyCampaignStoreColdStart:
             assert r.json()["recommendations"] == []
         finally:
             _ACTIVITY.pop(wallet, None)
+
+
+# ---------------------------------------------------------------------------
+# Cold-start → warmed-up boundary (#1387)
+# ---------------------------------------------------------------------------
+
+class TestColdStartBoundary:
+    """
+    Asserts the exact boundary between cold-start (trending fallback) and
+    warmed-up (personalised) scoring.
+
+    The boundary is: presence of an IndexedActivity row for the wallet.
+
+    - No activity row          → cold path, personalised=False
+    - Activity row (any shape) → warm path, personalised=True
+      * empty row              → warm path, but scores equal trending scores
+      * categories only        → warm path, boosts applied
+      * contributions only     → warm path, exclusions applied
+      * both signals           → fully warmed-up
+
+    These tests lock in the boundary so a future change to the selection
+    rule breaks CI rather than silently changing personalisation.
+    """
+
+    def test_no_activity_row_selects_cold_path(self):
+        wallet = "GBOUNDARY_COLD_0000000000000000000000000000000000000000"
+        _ACTIVITY.pop(wallet, None)
+
+        r = client.get(f"/recommendations?wallet={wallet}&limit=5")
+        assert r.status_code == 200, r.text
+        body = r.json()
+        assert body["personalised"] is False, (
+            "No activity row must select the cold path (personalised=False)"
+        )
+
+    def test_empty_activity_row_selects_warm_path_but_equals_trending(self):
+        """
+        An empty activity row must select the warm path (personalised=True)
+        AND produce the same ordering as the cold path, because neither
+        exclusions nor boosts apply.
+        """
+        wallet = "GBOUNDARY_EMPTY_000000000000000000000000000000000000000"
+        _ACTIVITY[wallet] = IndexedActivity(
+            wallet=wallet,
+            contributed_campaign_ids=[],
+            preferred_categories=[],
+        )
+        try:
+            r = client.get(f"/recommendations?wallet={wallet}&limit=10")
+            assert r.status_code == 200, r.text
+            body = r.json()
+            assert body["personalised"] is True, (
+                "Empty activity row must still select the warm path"
+            )
+
+            # Cold-path ordering for the same limit, no wallet.
+            r_cold = client.get("/recommendations?limit=10")
+            cold_ids = [rec["campaign_id"] for rec in r_cold.json()["recommendations"]]
+            warm_ids = [rec["campaign_id"] for rec in body["recommendations"]]
+
+            # Empty activity → no exclusions → same candidate set.
+            assert set(cold_ids) == set(warm_ids), (
+                "Empty activity row must not exclude or add any campaign"
+            )
+        finally:
+            _ACTIVITY.pop(wallet, None)
+
+    def test_categories_only_applies_boost(self):
+        """
+        With preferred categories set (no contributions), the warm path must
+        boost matching categories above their cold-path score.
+        """
+        # Find a category that exists in the seeded campaigns.
+        cats = [c.category for c in _CAMPAIGNS]
+        assert cats, "Seeded campaigns must be present for this test"
+        preferred = cats[0]
+        wallet = "GBOUNDARY_CATS_00000000000000000000000000000000000000000"
+
+        _ACTIVITY[wallet] = IndexedActivity(
+            wallet=wallet,
+            contributed_campaign_ids=[],
+            preferred_categories=[preferred],
+        )
+        try:
+            r = client.get(f"/recommendations?wallet={wallet}&limit=20")
+            assert r.status_code == 200, r.text
+            warm = {rec["campaign_id"]: rec["score"] for rec in r.json()["recommendations"]}
+
+            r_cold = client.get("/recommendations?limit=20")
+            cold = {rec["campaign_id"]: rec["score"] for rec in r_cold.json()["recommendations"]}
+
+            # For campaigns in the preferred category, the warm score must be
+            # ≥ the cold score (boost is >= 1.0).  For other categories it
+            # must be equal.
+            boosted = False
+            for c in _CAMPAIGNS:
+                if c.id not in warm or c.id not in cold:
+                    continue
+                if c.category == preferred:
+                    assert warm[c.id] >= cold[c.id], (
+                        f"Warm score for preferred category {preferred} "
+                        f"should be >= cold score"
+                    )
+                    if warm[c.id] > cold[c.id]:
+                        boosted = True
+                else:
+                    assert warm[c.id] == cold[c.id], (
+                        f"Non-preferred category {c.category} must score "
+                        f"identically in warm and cold paths"
+                    )
+            assert boosted or len([c for c in _CAMPAIGNS if c.category == preferred]) == 0, (
+                "Expected at least one campaign in the preferred category "
+                "to receive a boost"
+            )
+        finally:
+            _ACTIVITY.pop(wallet, None)
+
+    def test_contributions_only_applies_exclusion(self):
+        """
+        With contributed_campaign_ids set (no categories), the warm path must
+        exclude those campaigns from its output.
+        """
+        assert len(_CAMPAIGNS) >= 2, "Need at least two seeded campaigns"
+        already = _CAMPAIGNS[0].id
+        wallet = "GBOUNDARY_CONTRIBS_00000000000000000000000000000000000"
+
+        _ACTIVITY[wallet] = IndexedActivity(
+            wallet=wallet,
+            contributed_campaign_ids=[already],
+            preferred_categories=[],
+        )
+        try:
+            r = client.get(f"/recommendations?wallet={wallet}&limit=20")
+            assert r.status_code == 200, r.text
+            ids = [rec["campaign_id"] for rec in r.json()["recommendations"]]
+            assert already not in ids, (
+                f"Already-contributed campaign {already} must be excluded "
+                f"from the warm path"
+            )
+        finally:
+            _ACTIVITY.pop(wallet, None)
+
+    def test_both_signals_fully_warmed_up(self):
+        """
+        With both contributions and preferred categories, the warm path must
+        apply both the exclusion and the boost in a single response.
+        """
+        assert len(_CAMPAIGNS) >= 2
+        already = _CAMPAIGNS[0].id
+        preferred = _CAMPAIGNS[1].category
+        wallet = "GBOUNDARY_BOTH_00000000000000000000000000000000000000000"
+
+        _ACTIVITY[wallet] = IndexedActivity(
+            wallet=wallet,
+            contributed_campaign_ids=[already],
+            preferred_categories=[preferred],
+        )
+        try:
+            r = client.get(f"/recommendations?wallet={wallet}&limit=20")
+            assert r.status_code == 200, r.text
+            body = r.json()
+            ids = [rec["campaign_id"] for rec in body["recommendations"]]
+            assert already not in ids, "Exclusion must apply when both signals present"
+            assert body["personalised"] is True
+            assert len(body["recommendations"]) > 0, (
+                "Fully-warmed-up path must still recommend the remaining campaigns"
+            )
+        finally:
+            _ACTIVITY.pop(wallet, None)
