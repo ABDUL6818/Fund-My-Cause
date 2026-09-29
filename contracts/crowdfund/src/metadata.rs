@@ -8,6 +8,7 @@ use soroban_sdk::{Address, Env, String, Vec};
 
 use crate::{
     errors::ContractError,
+    helpers::require_auth_creator,
     storage::{
         metadata_field_key, MetadataField, KEY_CREATOR, KEY_STATUS, TTL_PERSISTENT_ENTRY,
     },
@@ -30,8 +31,7 @@ pub(crate) fn update_metadata(
     if status != Status::Active {
         return Err(ContractError::NotActive);
     }
-    let creator: Address = inst.get(&KEY_CREATOR).unwrap();
-    creator.require_auth();
+    require_auth_creator(&env)?;
 
     let updated_title = title.is_some();
     let updated_description = description.is_some();
@@ -120,6 +120,7 @@ pub(crate) fn update_ipfs_cid(env: Env, cid: String) -> Result<(), ContractError
     if status != Status::Active {
         return Err(ContractError::NotActive);
     }
+    require_auth_creator(&env)?;
     let creator: Address = inst.get(&KEY_CREATOR).unwrap();
     creator.require_auth();
     let ipfs_key = metadata_field_key(MetadataField::IpfsCid);

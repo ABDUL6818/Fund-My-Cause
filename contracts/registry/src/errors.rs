@@ -65,12 +65,14 @@ impl From<common::CommonError> for ContractError {
     /// | `AlreadyInitialized`    | `ContractError::AlreadyInitialized` (1) |
     /// | `AlreadyExists`         | `ContractError::AlreadyRegistered` (5) |
     /// | `InvalidInput`          | `ContractError::Unauthorized` (3) — closest available generic |
+    /// | `NotInitialized`        | `ContractError::NotInitialized` (2) |
     fn from(err: common::CommonError) -> Self {
         match err {
             common::CommonError::Unauthorized => ContractError::Unauthorized,
             common::CommonError::NotFound => ContractError::NotFound,
             common::CommonError::AlreadyInitialized => ContractError::AlreadyInitialized,
             common::CommonError::AlreadyExists => ContractError::AlreadyRegistered,
+            common::CommonError::NotInitialized => ContractError::NotInitialized,
             // No exact match for InvalidInput in the registry error set;
             // Unauthorized is the closest generic catch-all.
             common::CommonError::InvalidInput => ContractError::Unauthorized,

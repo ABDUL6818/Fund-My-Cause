@@ -9,7 +9,9 @@
 use soroban_sdk::{token, Address, Env};
 
 use crate::{
+    access::auth_admin,
     errors::ContractError,
+    helpers::require_auth_creator,
     storage::{
         DataKey, KEY_ADMIN, KEY_CREATOR, KEY_DEADLINE, KEY_GOAL, KEY_PLATFORM, KEY_RELEASED,
         KEY_SOFT_CAP, KEY_STATUS, KEY_STREAM, KEY_TOKEN, KEY_TOTAL, KEY_VESTING,
@@ -72,10 +74,10 @@ fn apply_vesting_schedule(
         return Err(ContractError::VestingNotComplete);
     }
 
-    if now >= v.cliff + v.duration {
+    if now >= v.cliff.checked_add(v.duration).ok_or(ContractError::Overflow)? {
         Ok(payout)
     } else {
-        let elapsed = now - v.cliff;
+        let elapsed = now.checked_sub(v.cliff).ok_or(ContractError::Overflow)?;
         Ok(payout
             .checked_mul(elapsed as i128)
             .ok_or(ContractError::Overflow)?
@@ -92,7 +94,7 @@ pub(crate) fn withdraw(env: Env) -> Result<(), ContractError> {
     // === Batch all instance reads up-front
     let inst = env.storage().instance();
     let status: Status = inst.get(&KEY_STATUS).unwrap();
-    let creator: Address = inst.get(&KEY_CREATOR).unwrap();
+    let creator = require_auth_creator(&env)?;
     let deadline: u64 = inst.get(&KEY_DEADLINE).unwrap();
     let goal: i128 = inst.get(&KEY_GOAL).unwrap();
     let total: i128 = inst.get(&KEY_TOTAL).unwrap();
@@ -106,7 +108,6 @@ pub(crate) fn withdraw(env: Env) -> Result<(), ContractError> {
     if status != Status::Active {
         return Err(ContractError::NotActive);
     }
-    creator.require_auth();
 
     let now = env.ledger().timestamp();
     validate_deadline_passed(now, deadline)?;
@@ -118,7 +119,7 @@ pub(crate) fn withdraw(env: Env) -> Result<(), ContractError> {
 
     // === Calculate fee and payout
     let fee = deduct_platform_fee(&env, &token_client, &platform_config, total, true);
-    let mut payout = total - fee;
+    let mut payout = total.checked_sub(fee).ok_or(ContractError::Overflow)?;
 
     // === Apply vesting if configured
     let vested = apply_vesting_schedule(now, &vesting, payout)?;
@@ -168,9 +169,7 @@ pub(crate) fn set_stream_config(
     start_time: u64,
     end_time: u64,
 ) -> Result<(), ContractError> {
-    let inst = env.storage().instance();
-    let creator: Address = inst.get(&KEY_CREATOR).unwrap();
-    creator.require_auth();
+    require_auth_creator(&env)?;
 
     let now = env.ledger().timestamp();
     if start_time <= now || end_time <= start_time {
@@ -196,9 +195,7 @@ pub(crate) fn set_stream_config(
 
 /// Claims the portion of streamed funds that has unlocked since the last claim.
 pub(crate) fn claim_stream(env: Env) -> Result<(), ContractError> {
-    let inst = env.storage().instance();
-    let creator: Address = inst.get(&KEY_CREATOR).unwrap();
-    creator.require_auth();
+    let creator = require_auth_creator(&env)?;
 
     let mut stream: StreamConfig = inst
         .get(&KEY_STREAM)
@@ -225,8 +222,8 @@ pub(crate) fn claim_stream(env: Env) -> Result<(), ContractError> {
     let vested_fraction = if now >= stream.end_time {
         total
     } else {
-        let elapsed = now - stream.start_time;
-        let duration = stream.end_time - stream.start_time;
+        let elapsed = now.checked_sub(stream.start_time).ok_or(ContractError::Overflow)?;
+        let duration = stream.end_time.checked_sub(stream.start_time).ok_or(ContractError::Overflow)?;
         // Issue #1145: use checked_mul to prevent overflow when total is large
         total
             .checked_mul(elapsed as i128)
@@ -234,7 +231,7 @@ pub(crate) fn claim_stream(env: Env) -> Result<(), ContractError> {
             .unwrap_or(total) // saturate to full total on overflow (extremely rare)
     };
 
-    let claimable = vested_fraction - stream.claimed;
+    let claimable = vested_fraction.checked_sub(stream.claimed).ok_or(ContractError::Overflow)?;
     if claimable <= 0 {
         return Err(ContractError::StreamFullyClaimed);
     }
@@ -249,7 +246,7 @@ pub(crate) fn claim_stream(env: Env) -> Result<(), ContractError> {
         0
     };
 
-    let payout = claimable - fee;
+    let payout = claimable.checked_sub(fee).ok_or(ContractError::Overflow)?;
     token_client.transfer(&env.current_contract_address(), &creator, &payout);
 
     stream.claimed = stream
@@ -287,9 +284,7 @@ pub(crate) fn record_release(env: Env, amount: i128) -> Result<(), ContractError
     if amount <= 0 {
         return Err(ContractError::AmountNotPositive);
     }
-    let inst = env.storage().instance();
-    let admin: Address = inst.get(&KEY_ADMIN).unwrap();
-    admin.require_auth();
+    auth_admin(&env)?;
 
     let released: i128 = inst.get(&KEY_RELEASED).unwrap_or(0);
     let new_released = released

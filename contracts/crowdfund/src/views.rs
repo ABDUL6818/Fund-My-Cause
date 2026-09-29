@@ -401,10 +401,10 @@ pub(crate) fn get_vested_amount(env: Env) -> i128 {
     if now < v.cliff {
         return 0;
     }
-    if v.duration == 0 || now >= v.cliff + v.duration {
+    if v.duration == 0 || now >= v.cliff.saturating_add(v.duration) {
         return payout;
     }
-    let elapsed = now - v.cliff;
+    let elapsed = now.saturating_sub(v.cliff);
     let duration = v.duration as i128;
     // Issue #1145: use checked_mul to prevent overflow on large payout * elapsed
     payout
@@ -460,7 +460,7 @@ pub(crate) fn contributor_list(env: Env, offset: u32, limit: u32) -> Vec<Address
 
     // Cap at 50 per the original contract spec.
     let capped_limit = limit.min(50);
-    let end = (offset + capped_limit).min(total_count);
+    let end = offset.saturating_add(capped_limit).min(total_count);
 
     // O(page_size) reads via individual indexed keys instead of loading and
     // deserialising the entire contributor list each time.

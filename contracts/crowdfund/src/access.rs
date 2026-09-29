@@ -31,7 +31,7 @@ use crate::{
 /// Delegates to [`common::AccessControl::require_stored_auth`] — the shared
 /// helper that replaced the inline "read KEY_ADMIN → require_auth" pattern
 /// duplicated across `access.rs`, `helpers.rs`, and `registry/admin.rs`.
-fn auth_admin(env: &Env) -> Result<Address, ContractError> {
+pub(crate) fn auth_admin(env: &Env) -> Result<Address, ContractError> {
     common::AccessControl::require_stored_auth(env, &KEY_ADMIN)
         .map_err(|_| ContractError::InvalidAddress)
 }

@@ -7,6 +7,7 @@ use soroban_sdk::{Address, Env, String, Vec};
 
 use crate::{
     errors::ContractError,
+    helpers::require_auth_creator,
     storage::{
         DataKey, KEY_ADMIN, KEY_ARCHIVED, KEY_CATEGORY, KEY_CREATOR, KEY_DEADLINE, KEY_DESC,
         KEY_GOAL, KEY_GOAL_HISTORY, KEY_MAX, KEY_META_HIST, KEY_MIN, KEY_PLATFORM, KEY_SOCIAL,
@@ -290,10 +291,7 @@ pub(crate) fn clone_campaign(
 ) -> Result<(), ContractError> {
     let inst = env.storage().instance();
     // #835: an un-initialised contract has no creator to authorise the clone.
-    let creator: Address = inst
-        .get(&KEY_CREATOR)
-        .ok_or(ContractError::InvalidAddress)?;
-    creator.require_auth();
+    let creator = require_auth_creator(&env)?;
 
     if new_goal <= 0 {
         return Err(ContractError::InvalidGoal);
@@ -379,10 +377,7 @@ pub(crate) fn cancel_campaign(env: Env) -> Result<(), ContractError> {
         return Err(ContractError::NotActive);
     }
     // #835: no creator means the contract was never initialised.
-    let creator: Address = inst
-        .get(&KEY_CREATOR)
-        .ok_or(ContractError::InvalidAddress)?;
-    creator.require_auth();
+    let creator = require_auth_creator(&env)?;
     let total_raised: i128 = inst.get(&KEY_TOTAL).unwrap_or(0);
     let old_status = status;
     inst.set(&KEY_STATUS, &Status::Cancelled);
@@ -415,17 +410,13 @@ pub(crate) fn archive(env: Env) -> Result<(), ContractError> {
     // contract reports InvalidAddress rather than the misleading NotActive that a
     // defaulted status would produce. On an initialised contract both keys are
     // always present, so the reordering is not observable.
-    let creator: Address = inst
-        .get(&KEY_CREATOR)
-        .ok_or(ContractError::InvalidAddress)?;
+    let creator = require_auth_creator(&env)?;
     let status: Status = inst.get(&KEY_STATUS).unwrap_or(Status::Active);
 
     // Only completed campaigns can be archived
     if status == Status::Active || status == Status::Paused || status == Status::Archived {
         return Err(ContractError::NotActive);
     }
-
-    creator.require_auth();
 
     let total_raised: i128 = inst.get(&KEY_TOTAL).unwrap_or(0);
     let now = env.ledger().timestamp();
