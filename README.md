@@ -377,3 +377,8 @@ Fund-My-Cause is powered by the Stellar network and Soroban smart contracts. Ste
 - [Stellar Docs](https://developers.stellar.org)
 - [Soroban Docs](https://soroban.stellar.org)
 - [Freighter Wallet](https://www.freighter.app)
+
+## Handsoff notes
+
+<!-- handsoff-issue-1361 -->
+- #1361: [Frontend] Extract i18n string usage audit and remove unused translation keys
