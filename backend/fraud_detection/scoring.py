@@ -19,6 +19,13 @@ run_full_scan(*)            – run all heuristics, enqueue flags, return new fl
 
 Thresholds and their rationale are documented in
 ``docs/fraud-detection-heuristics.md``.
+
+Design rationale
+────────────────
+The layer ordering, idempotency guarantees, and known edge cases are
+recorded in ADR-008 (``docs/adr/ADR-008-fraud-detection-scoring-pipeline-design.md``).
+Read that ADR before modifying a scoring layer — the order of the three
+scanners is load-bearing.
 """
 
 from __future__ import annotations

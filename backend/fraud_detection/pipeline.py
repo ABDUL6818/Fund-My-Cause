@@ -3,6 +3,13 @@ Fraud / Anomaly Detection Pipeline (#636, #1122)
 
 HTTP ingestion and API layer — thin handlers only.
 
+Architecture Decision Record
+───────────────────────────
+See ADR-008: Fraud-detection scoring pipeline design
+(docs/adr/ADR-008-fraud-detection-scoring-pipeline-design.md)
+for the rationale behind the three-layer scoring approach, idempotency
+guarantees, threshold parameters, and known edge cases.
+
 Architecture after #1122 split
 ────────────────────────────────
   repository.py  — all mutable in-process state (event store, flag queue)
