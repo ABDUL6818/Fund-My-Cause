@@ -20,7 +20,7 @@ import {
   Minus,
 } from "lucide-react";
 
-interface Props {
+export interface Props {
   contractId: string;
   totalRaised: bigint;
   connectedAddress?: string | null;

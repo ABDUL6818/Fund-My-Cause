@@ -1,14 +1,24 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import dynamic from "next/dynamic";
 import Image from "next/image";
 import { Copy, Check, ExternalLink } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { CountdownTimer } from "@/components/ui/CountdownTimer";
 import { ShareButton } from "@/components/ui/ShareButton";
-import { ContributionLeaderboard } from "@/components/ui/ContributionLeaderboard";
+import { ContributorList } from "@/components/campaign-detail/ContributorList";
 import { EmbedCodeGenerator } from "@/components/ui/EmbedCodeGenerator";
+
+// Lazy-load UpdatesFeed — not needed on initial paint
+const UpdatesFeed = dynamic(
+  () =>
+    import("@/components/campaign-detail/UpdatesFeed").then(
+      (m) => m.UpdatesFeed,
+    ),
+  { ssr: false },
+);
 import { useCampaign } from "@/hooks/useCampaign";
 import { useWallet } from "@/hooks/useWallet";
 import { CampaignActions } from "./CampaignActions";
@@ -238,10 +248,16 @@ export function CampaignDetailContent({ contractId }: { contractId: string }) {
           ) : null;
         })()}
 
-        <ContributionLeaderboard
+        <ContributorList
           contractId={contractId}
           totalRaised={stats.totalRaised}
           connectedAddress={address}
+        />
+
+        <UpdatesFeed
+          campaignId={contractId}
+          campaignTitle={info.title}
+          connectedAddress={address ?? undefined}
         />
 
         <ShareButton campaignId={contractId} campaignTitle={info.title} />
