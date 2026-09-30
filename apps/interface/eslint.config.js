@@ -7,8 +7,12 @@
 import tseslint from "../../node_modules/@typescript-eslint/eslint-plugin/dist/index.js";
 import tsParser from "../../node_modules/@typescript-eslint/parser/dist/index.js";
 import reactHooks from "../../node_modules/eslint-plugin-react-hooks/index.js";
+import { createRequire } from "module";
 import { fileURLToPath } from "url";
 import { dirname, resolve } from "path";
+
+const require = createRequire(import.meta.url);
+const pascalCaseComponentFiles = require("../../eslint-rules/pascal-case-component-files.js");
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -47,12 +51,22 @@ const eslintConfig = [
       "react-hooks": reactHooks,
       "@next/next": dummyPlugin(["no-img-element", "no-html-link-for-pages"]),
       "jsx-a11y": dummyPlugin(["media-has-caption"]),
+      "local-rules": {
+        rules: {
+          "pascal-case-component-files": pascalCaseComponentFiles,
+        },
+      },
     },
     rules: {
       "@typescript-eslint/no-unused-vars": "off",
       "@typescript-eslint/no-explicit-any": "off",
       "react-hooks/rules-of-hooks": "error",
       "react-hooks/exhaustive-deps": "off",
+
+      // ── Component file naming (#1368) ────────────────────────────────────────
+      // Enforce PascalCase for all .tsx files under src/components/.
+      // See docs/component-naming-convention.md for the full convention.
+      "local-rules/pascal-case-component-files": "error",
 
       // ── Module boundary enforcement (#1200) ─────────────────────────────────
       // Block direct imports into @fund-my-cause/components internals.
