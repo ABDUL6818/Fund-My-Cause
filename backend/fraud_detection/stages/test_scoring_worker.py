@@ -14,7 +14,7 @@ import time
 
 import pytest
 
-from scoring_worker import (
+from stages.scoring_worker import (
     ContributionPayload,
     ScoringJob,
     SCORING_QUEUE_MAXSIZE,

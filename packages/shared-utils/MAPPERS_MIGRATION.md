@@ -110,7 +110,7 @@ The shape parity contract tests in `mapper-contract.test.ts` verify:
 Run the contract tests to verify shape parity after any changes:
 
 ```bash
-pnpm test packages/shared-utils/src/__tests__/mapper-contract.test.ts
+npm test --workspace=packages/shared-utils -- src/__tests__/mapper-contract.test.ts
 ```
 
 ## Field Mapping Reference
