@@ -34,6 +34,7 @@ import scoring as _scoring
 import repository as _repo
 
 from stages.trace_id import TraceIDMiddleware
+from stages.idempotency import IdempotencyStore, IDEMPOTENCY_KEY_HEADER, IDEMPOTENCY_KEY_MAX_LEN  # noqa: F401
 from stages.scoring_worker import (  # noqa: F401
     ContributionPayload, ScoringJob, scoring_queue as _scoring_queue,
     scoring_worker as _scoring_worker,
@@ -41,6 +42,7 @@ from stages.scoring_worker import (  # noqa: F401
 from stages.routes import (
     healthz as _healthz, readyz as _readyz, ingest_contribution,
     trigger_scan, get_metrics_handler, moderation_queue_handler, mark_reviewed_handler,
+    _IDEMPOTENCY_STORE, IdempotencyStore,  # noqa: F401
 )
 
 configure_structlog()

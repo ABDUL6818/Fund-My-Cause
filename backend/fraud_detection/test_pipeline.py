@@ -32,6 +32,7 @@ from pipeline import (
     SPIKE_WINDOW_SECONDS,
 )
 import pipeline as pipeline_module
+import scoring
 
 client = TestClient(app)
 
@@ -41,7 +42,7 @@ def _clear():
     _REFUNDS.clear()
     _CAMPAIGN_RECORDS.clear()
     _QUEUE.clear()
-    pipeline_module._last_duplicate_scan_at = 0.0
+    scoring._last_duplicate_scan_at = 0.0
     # Drain the scoring queue
     while not _scoring_queue.empty():
         try:
@@ -296,10 +297,9 @@ def test_contributions_endpoint_returns_queued():
         "timestamp": time.time(),
     }
     r = client.post("/contributions", json=payload)
-    assert r.status_code == 200
+    assert r.status_code == 202
     body = r.json()
-    assert body["status"] == "queued"
-    assert "queue_depth" in body
+    assert body["status"] == "accepted"
 
     # Contribution must NOT be in the store yet (async path)
     assert len(_CONTRIBUTIONS) == initial_count, (
@@ -311,7 +311,7 @@ def test_contributions_endpoint_returns_queued():
 
 
 def test_contributions_endpoint_returns_queued_with_queue_depth():
-    """queue_depth in the response must be a non-negative integer."""
+    """queue_depth reported by /metrics must be a non-negative integer."""
     _clear()
     payload = {
         "campaignId": "CTEST2",
@@ -321,9 +321,10 @@ def test_contributions_endpoint_returns_queued_with_queue_depth():
         "timestamp": time.time(),
     }
     r = client.post("/contributions", json=payload)
-    assert r.status_code == 200
-    assert isinstance(r.json()["queue_depth"], int)
-    assert r.json()["queue_depth"] >= 0
+    assert r.status_code == 202
+    depth = client.get("/metrics").json()["queue_depth"]
+    assert isinstance(depth, int)
+    assert depth >= 0
     _clear()
 
 
@@ -466,9 +467,9 @@ def test_duplicate_scan_is_rate_limited_across_repeated_calls():
         "First scan after a cold start should run the duplicate-content pass"
     )
 
-    before = pipeline_module._last_duplicate_scan_at
+    before = scoring._last_duplicate_scan_at
     second = run_full_scan()
-    after = pipeline_module._last_duplicate_scan_at
+    after = scoring._last_duplicate_scan_at
 
     assert after == before, (
         "A second run_full_scan() call within the rate-limit window must "
@@ -488,7 +489,7 @@ def test_duplicate_scan_runs_again_after_interval_elapses():
 
     run_full_scan()
     # Simulate the interval having elapsed.
-    pipeline_module._last_duplicate_scan_at -= DUPLICATE_SCAN_MIN_INTERVAL_SECONDS + 1
+    scoring._last_duplicate_scan_at -= DUPLICATE_SCAN_MIN_INTERVAL_SECONDS + 1
 
     flags = run_full_scan()
     assert any(f.reason == FlagReason.DUPLICATE_CONTENT for f in flags)
@@ -501,10 +502,10 @@ def test_scan_endpoint_forces_duplicate_scan_bypassing_rate_limit():
     _CAMPAIGN_RECORDS.append(CampaignRecord("DUP_B", "Fund the Open Commons", "desc2"))
 
     run_full_scan()  # primes _last_duplicate_scan_at
-    before = pipeline_module._last_duplicate_scan_at
+    before = scoring._last_duplicate_scan_at
 
     flags = run_full_scan(force_duplicate_scan=True)
-    after = pipeline_module._last_duplicate_scan_at
+    after = scoring._last_duplicate_scan_at
 
     assert after > before
     assert any(f.reason == FlagReason.DUPLICATE_CONTENT for f in flags)
