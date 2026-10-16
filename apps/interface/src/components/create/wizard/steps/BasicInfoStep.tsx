@@ -9,7 +9,7 @@ import {
 } from "@/lib/validation";
 import { CATEGORY_TAXONOMY } from "@/lib/categories";
 import { Input, Select, Textarea } from "@fund-my-cause/components";
-import { fieldStyles } from "../fields";
+import { fieldStyles } from "../Fields";
 import type { StepProps } from "../types";
 
 /**

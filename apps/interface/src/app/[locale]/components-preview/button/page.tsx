@@ -12,12 +12,10 @@
  * a pure component showcase so screenshots are stable and reproducible.
  */
 
-import React, { useState } from "react";
+import React from "react";
 import { Button } from "@fund-my-cause/components";
 
 export default function ButtonPreviewPage() {
-  const [loading, setLoading] = useState(false);
-
   return (
     <div className="min-h-screen bg-gray-50 p-8 space-y-12">
       <h1 className="text-2xl font-bold text-gray-900">Button — component preview</h1>

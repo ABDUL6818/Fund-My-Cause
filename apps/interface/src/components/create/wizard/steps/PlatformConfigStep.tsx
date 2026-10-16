@@ -2,7 +2,7 @@
 
 import { validateFeeBps } from "@/lib/validation";
 import { Input } from "@fund-my-cause/components";
-import { fieldStyles } from "../fields";
+import { fieldStyles } from "../Fields";
 import type { StepProps } from "../types";
 
 /**
