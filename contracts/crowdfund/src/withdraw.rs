@@ -169,6 +169,7 @@ pub(crate) fn set_stream_config(
     start_time: u64,
     end_time: u64,
 ) -> Result<(), ContractError> {
+    let inst = env.storage().instance();
     require_auth_creator(&env)?;
 
     let now = env.ledger().timestamp();
@@ -196,6 +197,7 @@ pub(crate) fn set_stream_config(
 /// Claims the portion of streamed funds that has unlocked since the last claim.
 pub(crate) fn claim_stream(env: Env) -> Result<(), ContractError> {
     let creator = require_auth_creator(&env)?;
+    let inst = env.storage().instance();
 
     let mut stream: StreamConfig = inst
         .get(&KEY_STREAM)
@@ -281,6 +283,7 @@ pub(crate) fn claim_stream(env: Env) -> Result<(), ContractError> {
 
 /// Records that `amount` stroops have been released to the creator.
 pub(crate) fn record_release(env: Env, amount: i128) -> Result<(), ContractError> {
+    let inst = env.storage().instance();
     if amount <= 0 {
         return Err(ContractError::AmountNotPositive);
     }
