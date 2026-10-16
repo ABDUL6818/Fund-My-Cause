@@ -881,6 +881,7 @@ impl CrowdfundContract {
     /// - Sets emergency lock time to current time + lock_period
     /// - Publishes "EmergencyWithdrawalInitiated" event
     pub fn initiate_emergency_withdrawal(env: Env, lock_period: u64) -> Result<(), ContractError> {
+        let inst = env.storage().instance();
         auth_admin(&env)?;
         let lock_until = env.ledger().timestamp() + lock_period;
         inst.set(&DataKey::EmergencyLockTime, &lock_until);
@@ -911,7 +912,8 @@ impl CrowdfundContract {
     /// - Clears emergency lock time
     /// - Publishes "EmergencyWithdrawalExecuted" event
     pub fn execute_emergency_withdrawal(env: Env) -> Result<(), ContractError> {
-        auth_admin(&env)?;
+        let inst = env.storage().instance();
+        let admin = auth_admin(&env)?;
 
         let lock_time: u64 = inst.get(&DataKey::EmergencyLockTime).unwrap_or(0);
         if lock_time == 0 || env.ledger().timestamp() < lock_time {
@@ -960,6 +962,7 @@ impl CrowdfundContract {
     /// - Clears emergency lock time
     /// - Publishes "EmergencyWithdrawalCancelled" event
     pub fn cancel_emergency_withdrawal(env: Env) -> Result<(), ContractError> {
+        let inst = env.storage().instance();
         auth_admin(&env)?;
         inst.set(&DataKey::EmergencyLockTime, &0u64);
         env.events()
@@ -988,6 +991,7 @@ impl CrowdfundContract {
         required_approvals: u32,
         approvers: Vec<Address>,
     ) -> Result<(), ContractError> {
+        let inst = env.storage().instance();
         auth_admin(&env)?;
 
         // required_approvals must be between 1 and the total number of approvers
@@ -1170,6 +1174,7 @@ impl CrowdfundContract {
         match_ratio: u32,
         max_match: i128,
     ) -> Result<(), ContractError> {
+        let inst = env.storage().instance();
         require_auth_creator(&env)?;
 
         if match_ratio > 10_000 {
@@ -1425,6 +1430,7 @@ impl CrowdfundContract {
     /// * `Ok(())` on success
     /// * `Err(ContractError::InvalidDeadline)` if new_deadline <= current_deadline
     pub fn propose_extension(env: Env, new_deadline: u64) -> Result<(), ContractError> {
+        let inst = env.storage().instance();
         let creator = require_auth_creator(&env)?;
 
         let current_deadline: u64 = inst.get(&KEY_DEADLINE).unwrap();
@@ -2335,7 +2341,7 @@ impl CrowdfundContract {
         fee_bps: u32,
         provider: Address,
     ) -> Result<(), ContractError> {
-        require_auth_creator(&env)?;
+        let creator = require_auth_creator(&env)?;
 
         validate_fee_bps(fee_bps)?;
         validate_address_not_self(&creator, &provider)?;
@@ -2475,6 +2481,7 @@ impl CrowdfundContract {
         reward_token: Address,
         reward_per_unit: i128,
     ) -> Result<(), ContractError> {
+        let inst = env.storage().instance();
         require_auth_creator(&env)?;
 
         validate_positive_amount(reward_per_unit)?;
@@ -2737,6 +2744,7 @@ impl CrowdfundContract {
     /// * `Ok(())` on success
     /// * `Err(ContractError::Unauthorized)` if caller is not admin
     pub fn migrate_version(env: Env) -> Result<(), ContractError> {
+        let inst = env.storage().instance();
         auth_admin(&env)?;
 
         let from_version: u32 = inst.get(&KEY_CONTRACT_VERSION).unwrap_or(0);
@@ -3324,6 +3332,7 @@ impl CrowdfundContract {
         required_approvals: u32,
         timelock_delay: u64,
     ) -> Result<(), ContractError> {
+        let inst = env.storage().instance();
         auth_admin(&env)?;
 
         if inst.has(&KEY_GOVERNANCE_CONFIG) {
@@ -3692,6 +3701,7 @@ impl CrowdfundContract {
         required_approvals: u32,
         timelock_delay: u64,
     ) -> Result<(), ContractError> {
+        let inst = env.storage().instance();
         auth_admin(&env)?;
 
         validate_governance_config(required_approvals, governors.len(), timelock_delay)?;
@@ -3758,7 +3768,8 @@ impl CrowdfundContract {
         pool: i128,
         rate_bps: u32,
     ) -> Result<(), ContractError> {
-        require_auth_creator(&env)?;
+        let inst = env.storage().instance();
+        let creator = require_auth_creator(&env)?;
 
         let status: Status = inst.get(&KEY_STATUS).unwrap();
         if status != Status::Active {
