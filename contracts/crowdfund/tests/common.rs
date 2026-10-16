@@ -57,3 +57,14 @@ pub fn setup(
         creator,
     }
 }
+
+/// Creates a fresh contributor, mints `amount` to them and contributes it to
+/// the campaign. Returns the contributor's address.
+#[allow(dead_code)] // used by a subset of the test binaries that include this module
+pub fn fund(env: &Env, c: &Campaign<'_>, amount: i128) -> Address {
+    let contributor = Address::generate(env);
+    c.token_admin.mint(&contributor, &amount);
+    c.client
+        .contribute(&contributor, &amount, &c.token_id, &None);
+    contributor
+}
