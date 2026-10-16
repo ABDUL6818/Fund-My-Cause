@@ -76,8 +76,8 @@ const PREVIEW_BASE = "/components-preview";
 async function goToPreview(page: Page, component: string): Promise<void> {
   await page.goto(`${PREVIEW_BASE}/${component}`);
   await page.waitForLoadState("domcontentloaded");
-  // Extra settle time for CSS transitions/animations to reach their final state
-  await page.waitForTimeout(150);
+  // Web-first wait: resolves as soon as the preview has rendered its test ids
+  await expect(page.locator("[data-testid]").first()).toBeVisible();
 }
 
 // ── Test suites ───────────────────────────────────────────────────────────────
@@ -164,7 +164,8 @@ test.describe("Visual regression — Card (#1172)", () => {
     await goToPreview(page, "card");
     const card = page.locator("[data-testid='card-hoverable']");
     await card.hover();
-    await page.waitForTimeout(200); // let transition settle
+    // toHaveScreenshot retries until two consecutive captures match, so the
+    // hover transition settles without a fixed sleep.
     await expect(card).toHaveScreenshot("card-hoverable-hovered.png", {
       maxDiffPixelRatio: THRESHOLD,
     });
@@ -270,9 +271,10 @@ test.describe("Visual regression — Select (#1172)", () => {
 
   test("Select: error state", async ({ page }) => {
     await goToPreview(page, "select");
-    await expect(
-      page.locator("[data-testid='select-error']"),
-    ).toHaveScreenshot("select-error.png", { maxDiffPixelRatio: THRESHOLD });
+    await expect(page.locator("[data-testid='select-error']")).toHaveScreenshot(
+      "select-error.png",
+      { maxDiffPixelRatio: THRESHOLD },
+    );
   });
 
   test("Select: disabled state", async ({ page }) => {
@@ -315,9 +317,10 @@ test.describe("Visual regression — Input (#1172)", () => {
 
   test("Input: error state", async ({ page }) => {
     await goToPreview(page, "input");
-    await expect(
-      page.locator("[data-testid='input-error']"),
-    ).toHaveScreenshot("input-error.png", { maxDiffPixelRatio: THRESHOLD });
+    await expect(page.locator("[data-testid='input-error']")).toHaveScreenshot(
+      "input-error.png",
+      { maxDiffPixelRatio: THRESHOLD },
+    );
   });
 
   test("Input: disabled state", async ({ page }) => {
@@ -362,10 +365,11 @@ test.describe("Visual regression — mobile viewport (#1172)", () => {
   test("Card default on mobile viewport", async ({ page }) => {
     await page.setViewportSize({ width: 375, height: 812 });
     await goToPreview(page, "card");
-    await expect(
-      page.locator("[data-testid='card-default']"),
-    ).toHaveScreenshot("card-default-mobile.png", {
-      maxDiffPixelRatio: THRESHOLD,
-    });
+    await expect(page.locator("[data-testid='card-default']")).toHaveScreenshot(
+      "card-default-mobile.png",
+      {
+        maxDiffPixelRatio: THRESHOLD,
+      },
+    );
   });
 });
