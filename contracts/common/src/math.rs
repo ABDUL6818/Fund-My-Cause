@@ -107,4 +107,70 @@ mod tests {
         let result = proportional(i128::MAX, 1, 2);
         assert!(result.is_err());
     }
+
+    #[test]
+    fn test_apply_bps_max_representable_amount() {
+        // The largest amount whose product with 10_000 still fits in i128.
+        let amount = i128::MAX / BASIS_POINTS_MAX;
+        assert_eq!(apply_bps(amount, 10_000).unwrap(), amount);
+        // One unit more overflows the intermediate multiplication.
+        assert_eq!(
+            apply_bps(amount + 1, 10_000),
+            Err(crate::CommonError::InvalidInput)
+        );
+    }
+
+    #[test]
+    fn test_apply_bps_zero_inputs() {
+        assert_eq!(apply_bps(0, 10_000).unwrap(), 0);
+        assert_eq!(apply_bps(i128::MIN, 0).unwrap(), 0);
+    }
+
+    #[test]
+    fn test_apply_bps_truncates_toward_zero_for_negative_amounts() {
+        // -5_000 / 10_000 truncates to 0, not -1.
+        assert_eq!(apply_bps(-1, 5_000).unwrap(), 0);
+        assert_eq!(apply_bps(-20_000, 5_000).unwrap(), -10_000);
+    }
+
+    #[test]
+    fn test_apply_bps_saturating_clamps_at_extremes() {
+        assert_eq!(
+            apply_bps_saturating(i128::MAX, 2),
+            i128::MAX / BASIS_POINTS_MAX
+        );
+        assert_eq!(
+            apply_bps_saturating(i128::MIN, 2),
+            i128::MIN / BASIS_POINTS_MAX
+        );
+        assert_eq!(apply_bps_saturating(0, 10_000), 0);
+    }
+
+    #[test]
+    fn test_proportional_floors_fractional_results() {
+        assert_eq!(proportional(2, 3, 1).unwrap(), 0);
+        assert_eq!(proportional(-1, 2, 1000).unwrap(), -500);
+    }
+
+    #[test]
+    fn test_proportional_max_value_without_overflow() {
+        assert_eq!(proportional(i128::MAX, 1, 1).unwrap(), i128::MAX);
+    }
+
+    #[test]
+    fn test_proportional_rejects_intermediate_overflow() {
+        assert_eq!(
+            proportional(i128::MAX, 2, 2),
+            Err(crate::CommonError::InvalidInput)
+        );
+    }
+
+    #[test]
+    fn test_proportional_rejects_min_divided_by_negative_one() {
+        // i128::MIN / -1 is not representable and must not panic.
+        assert_eq!(
+            proportional(i128::MIN, -1, 1),
+            Err(crate::CommonError::InvalidInput)
+        );
+    }
 }
