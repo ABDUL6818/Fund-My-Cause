@@ -6,7 +6,7 @@ import { ImageUploader } from "@/components/ui/ImageUploader";
 import { VideoUploader } from "@/components/ui/VideoUploader";
 import { logError } from "@/lib/errorLogger";
 import { Input } from "@fund-my-cause/components";
-import { Field, fieldStyles } from "../fields";
+import { Field, fieldStyles } from "../Fields";
 import type { StepProps } from "../types";
 
 /**
