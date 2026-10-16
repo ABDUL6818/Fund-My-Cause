@@ -149,6 +149,7 @@ impl CachedInstanceView {
     ///
     /// Returns `0` when no platform config is set.
     /// This is a pure in-memory computation — no additional storage reads.
+    #[cfg(test)]
     #[inline]
     pub(crate) fn platform_fee_for(&self, amount: i128) -> i128 {
         self.platform_config
@@ -160,6 +161,7 @@ impl CachedInstanceView {
     /// Return the current fee mode.
     ///
     /// Pure in-memory — no storage reads.
+    #[cfg(test)]
     #[inline]
     pub(crate) fn fee_mode(&self) -> FeeMode {
         self.platform_config
@@ -175,6 +177,7 @@ impl CachedInstanceView {
     ///
     /// # Arguments
     /// * `now` — current ledger timestamp (obtained once by the caller).
+    #[cfg(test)]
     #[inline]
     pub(crate) fn vested_amount(&self, now: u64) -> i128 {
         if self.total <= 0 {

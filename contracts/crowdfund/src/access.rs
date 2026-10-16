@@ -180,6 +180,7 @@ pub(crate) fn add_to_denylist(env: Env, address: Address) -> Result<(), Contract
 }
 
 /// Removes an address from the deny list (admin only).
+#[cfg(test)]
 pub(crate) fn remove_from_denylist(env: Env, address: Address) -> Result<(), ContractError> {
     auth_admin(&env)?;
     env.storage()
@@ -193,6 +194,7 @@ pub(crate) fn remove_from_denylist(env: Env, address: Address) -> Result<(), Con
 }
 
 /// Returns `true` if the address is on the allow list.
+#[cfg(test)]
 pub(crate) fn is_allowlisted(env: Env, address: Address) -> bool {
     env.storage()
         .persistent()
@@ -201,6 +203,7 @@ pub(crate) fn is_allowlisted(env: Env, address: Address) -> bool {
 }
 
 /// Returns `true` if the address is on the deny list.
+#[cfg(test)]
 pub(crate) fn is_denylisted(env: Env, address: Address) -> bool {
     env.storage()
         .persistent()
