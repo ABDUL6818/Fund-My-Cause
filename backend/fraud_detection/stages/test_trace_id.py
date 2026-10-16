@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import pytest
 
-from trace_id import TRACE_ID_HEADER, _is_valid_trace_id
+from stages.trace_id import TRACE_ID_HEADER, _is_valid_trace_id
 
 
 class TestTraceIDValidation:

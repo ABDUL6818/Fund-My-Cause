@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import pytest
 
-from idempotency import IdempotencyStore, IDEMPOTENCY_KEY_HEADER, IDEMPOTENCY_KEY_MAX_LEN
+from stages.idempotency import IdempotencyStore, IDEMPOTENCY_KEY_HEADER, IDEMPOTENCY_KEY_MAX_LEN
 
 
 class TestPipelineStagesComposition:

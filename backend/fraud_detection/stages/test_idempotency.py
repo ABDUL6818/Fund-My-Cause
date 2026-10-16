@@ -14,7 +14,7 @@ import time
 
 import pytest
 
-from idempotency import IDEMPOTENCY_TTL_SECONDS, IdempotencyStore
+from stages.idempotency import IDEMPOTENCY_TTL_SECONDS, IdempotencyStore
 
 
 class TestIdempotencyStore:

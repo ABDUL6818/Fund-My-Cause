@@ -3,7 +3,7 @@ Fraud-detection scoring layer (#1122).
 
 This module contains the pure heuristic logic that detects suspicious
 patterns over contribution and campaign data.  It has NO dependency on
-FastAPI, asyncio, or HTTP — it only reads from the repository layer via the
+a web framework, asyncio, or HTTP — it only reads from the repository layer via the
 functions exposed in ``repository.py``.
 
 This separation means that every scoring rule can be unit-tested without

@@ -34,7 +34,7 @@
   "scripts": {
     "build": "tsc",
     "dev": "tsc --watch",
-    "test": "vitest",
+    "test": "vitest run --coverage",
     "test:coverage": "vitest run --coverage"
   },
   "dependencies": {

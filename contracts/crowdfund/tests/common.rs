@@ -58,13 +58,11 @@ pub fn setup(
     }
 }
 
-/// Creates a fresh contributor, mints `amount` to them and contributes it to
-/// the campaign. Returns the contributor's address.
-#[allow(dead_code)] // used by a subset of the test binaries that include this module
-pub fn fund(env: &Env, c: &Campaign<'_>, amount: i128) -> Address {
-    let contributor = Address::generate(env);
-    c.token_admin.mint(&contributor, &amount);
-    c.client
-        .contribute(&contributor, &amount, &c.token_id, &None);
-    contributor
+/// Shared fixture for the upgrade-path tests (issue #1490).
+///
+/// Builds a campaign at the current schema version so every upgrade step test
+/// starts from the same setup instead of re-implementing it.
+#[allow(dead_code)] // used by upgrade_step_harness.rs only
+pub fn setup_upgrade_campaign(env: &Env) -> Campaign<'_> {
+    setup(env, 10_000, 1_000_000, None)
 }

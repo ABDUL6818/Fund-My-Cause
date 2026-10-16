@@ -7,9 +7,10 @@ Each stage is responsible for a specific part of the pipeline:
 - scoring_worker: Async scoring worker, payload types, and queue metrics
 """
 
-from idempotency import IdempotencyStore, IDEMPOTENCY_KEY_HEADER, IDEMPOTENCY_TTL_SECONDS, IDEMPOTENCY_KEY_MAX_LEN
-from trace_id import TraceIDMiddleware, TRACE_ID_HEADER
-from scoring_worker import (
+from .base import Stage, run_stages, stage_names
+from .idempotency import IdempotencyStore, IDEMPOTENCY_KEY_HEADER, IDEMPOTENCY_TTL_SECONDS, IDEMPOTENCY_KEY_MAX_LEN
+from .trace_id import TraceIDMiddleware, TRACE_ID_HEADER
+from .scoring_worker import (
     ContributionPayload,
     ScoringJob,
     scoring_queue,
@@ -19,6 +20,9 @@ from scoring_worker import (
 )
 
 __all__ = [
+    "Stage",
+    "run_stages",
+    "stage_names",
     "IdempotencyStore",
     "IDEMPOTENCY_KEY_HEADER",
     "IDEMPOTENCY_TTL_SECONDS",
