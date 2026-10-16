@@ -214,6 +214,8 @@ npm run dev
 
 Open [http://localhost:3000](http://localhost:3000).
 
+For the full setup (npm workspaces, Rust toolchain, Docker Compose), follow **[docs/SETUP.md](./docs/SETUP.md)**, the single setup guide.
+
 ### 6. Run the backend services (optional)
 
 The frontend runs without them, but if you are working on `services/graphql-api`
