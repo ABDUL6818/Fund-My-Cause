@@ -1,6 +1,70 @@
-/// Storage management and constants for the crowdfund contract.
-///
-/// This module provides storage keys and helper utilities for managing contract state.
+//! Storage management and constants for the crowdfund contract.
+//!
+//! This module provides storage keys and helper utilities for managing contract state.
+//!
+//! ## Storage key table
+//!
+//! Every `KEY_*` constant below is listed once. The `Storage` column is the
+//! ledger entry type the key is written to; the `TTL policy` column is how its
+//! lifetime is extended. The `storage_key_audit` tests in this file fail if a
+//! constant is added without a row here, or if a row has no recognised policy.
+//!
+//! | Constant | Symbol | Storage | TTL policy |
+//! |---|---|---|---|
+//! | `KEY_CREATOR` | `CREATOR` | instance | instance: contract-wide TTL_INSTANCE_EXTEND_MIN/MAX bump |
+//! | `KEY_TOKEN` | `TOKEN` | instance | instance: contract-wide TTL_INSTANCE_EXTEND_MIN/MAX bump |
+//! | `KEY_GOAL` | `GOAL` | instance | instance: contract-wide TTL_INSTANCE_EXTEND_MIN/MAX bump |
+//! | `KEY_DEADLINE` | `DEADLINE` | instance | instance: contract-wide TTL_INSTANCE_EXTEND_MIN/MAX bump |
+//! | `KEY_TOTAL` | `TOTAL` | instance | instance: contract-wide TTL_INSTANCE_EXTEND_MIN/MAX bump |
+//! | `KEY_CONTRIBS` | `CONTRIBS` | none | reserved: declared but not read or written |
+//! | `KEY_STATUS` | `STATUS` | instance | instance: contract-wide TTL_INSTANCE_EXTEND_MIN/MAX bump |
+//! | `KEY_MIN` | `MIN` | instance | instance: contract-wide TTL_INSTANCE_EXTEND_MIN/MAX bump |
+//! | `KEY_MAX` | `MAX` | instance | instance: contract-wide TTL_INSTANCE_EXTEND_MIN/MAX bump |
+//! | `KEY_TITLE` | `TITLE` | instance | instance: contract-wide TTL_INSTANCE_EXTEND_MIN/MAX bump |
+//! | `KEY_DESC` | `DESC` | instance | instance: contract-wide TTL_INSTANCE_EXTEND_MIN/MAX bump |
+//! | `KEY_SOCIAL` | `SOCIAL` | instance | instance: contract-wide TTL_INSTANCE_EXTEND_MIN/MAX bump |
+//! | `KEY_PLATFORM` | `PLATFORM` | instance | instance: contract-wide TTL_INSTANCE_EXTEND_MIN/MAX bump |
+//! | `KEY_ADMIN` | `ADMIN` | instance | instance: contract-wide TTL_INSTANCE_EXTEND_MIN/MAX bump |
+//! | `KEY_RATE_LIMIT` | `RATELIMIT` | instance | instance: contract-wide TTL_INSTANCE_EXTEND_MIN/MAX bump |
+//! | `KEY_INSURANCE` | `INSURE` | instance | instance: contract-wide TTL_INSTANCE_EXTEND_MIN/MAX bump |
+//! | `KEY_INSURANCE_POOL` | `INSPOOL` | instance | instance: contract-wide TTL_INSTANCE_EXTEND_MIN/MAX bump |
+//! | `KEY_CATEGORY` | `CATEGORY` | instance | instance: contract-wide TTL_INSTANCE_EXTEND_MIN/MAX bump |
+//! | `KEY_VESTING` | `VESTING` | instance | instance: contract-wide TTL_INSTANCE_EXTEND_MIN/MAX bump |
+//! | `KEY_GOAL_HISTORY` | `GHIST` | persistent | persistent: per-entry TTL_PERSISTENT_ENTRY bump on write |
+//! | `KEY_VISIBILITY` | `VIS` | instance | instance: contract-wide TTL_INSTANCE_EXTEND_MIN/MAX bump |
+//! | `KEY_META_HIST` | `METAHIST` | persistent | persistent: per-entry TTL_PERSISTENT_ENTRY bump on write |
+//! | `KEY_START_TIME` | `START` | instance | instance: contract-wide TTL_INSTANCE_EXTEND_MIN/MAX bump |
+//! | `KEY_ARCHIVED` | `ARCHIVED` | instance | instance: contract-wide TTL_INSTANCE_EXTEND_MIN/MAX bump |
+//! | `KEY_MILESTONES` | `MILESTONE` | persistent | persistent: per-entry TTL_PERSISTENT_ENTRY bump on write |
+//! | `KEY_MILESTONE_STATUS` | `MLSTATUS` | none | reserved: declared but not read or written |
+//! | `KEY_NEXT_RELEASE` | `NEXTREL` | none | reserved: declared but not read or written |
+//! | `KEY_VERIFICATION` | `VERIFY` | none | reserved: declared but not read or written |
+//! | `KEY_ANALYTICS` | `ANALYTICS` | none | reserved: declared but not read or written |
+//! | `KEY_ANALYTICS_DATA` | `ANALDATA` | none | reserved: declared but not read or written |
+//! | `KEY_DISPUTES` | `DISPUTES` | persistent | persistent: per-entry TTL_PERSISTENT_ENTRY bump on write |
+//! | `KEY_DISPUTE_ID` | `DISPID` | persistent | persistent: per-entry TTL_PERSISTENT_ENTRY bump on write |
+//! | `KEY_DISPUTE_VOTE` | `DISPVOTE` | none | reserved: declared but not read or written |
+//! | `KEY_CONTRACT_VERSION` | `CVER` | instance | instance: contract-wide TTL_INSTANCE_EXTEND_MIN/MAX bump |
+//! | `KEY_VERSION_HISTORY` | `VERHIST` | persistent | persistent: per-entry TTL_PERSISTENT_ENTRY bump on write |
+//! | `KEY_LAST_VALIDATION` | `LASTVAL` | instance | instance: contract-wide TTL_INSTANCE_EXTEND_MIN/MAX bump |
+//! | `KEY_DEBUG_SNAPSHOT` | `DBGSNAP` | instance | instance: contract-wide TTL_INSTANCE_EXTEND_MIN/MAX bump |
+//! | `KEY_PERF_THRESHOLD` | `PERFTHR` | instance | instance: contract-wide TTL_INSTANCE_EXTEND_MIN/MAX bump |
+//! | `KEY_PERF_STATS` | `PERFST` | none | reserved: declared but not read or written |
+//! | `KEY_GOVERNANCE_CONFIG` | `GOVCFG` | instance | instance: contract-wide TTL_INSTANCE_EXTEND_MIN/MAX bump |
+//! | `KEY_GOVERNANCE_NONCE` | `GOVNONCE` | instance | instance: contract-wide TTL_INSTANCE_EXTEND_MIN/MAX bump |
+//! | `KEY_EMERGENCY_PAUSE` | `EMPAUSE` | instance | instance: contract-wide TTL_INSTANCE_EXTEND_MIN/MAX bump |
+//! | `KEY_REENTRANCY_LOCK` | `REENTLK` | none | reserved: declared but not read or written |
+//! | `KEY_STREAM` | `STREAM` | instance | instance: contract-wide TTL_INSTANCE_EXTEND_MIN/MAX bump |
+//! | `KEY_SOFT_CAP` | `SOFTCAP` | instance | instance: contract-wide TTL_INSTANCE_EXTEND_MIN/MAX bump |
+//! | `KEY_STRETCH_GOAL` | `STRETCH` | instance | instance: contract-wide TTL_INSTANCE_EXTEND_MIN/MAX bump |
+//! | `KEY_RELEASED` | `RELEASED` | instance | instance: contract-wide TTL_INSTANCE_EXTEND_MIN/MAX bump |
+//! | `KEY_PAUSE_TIMELOCK` | `PTLOCK` | instance | instance: contract-wide TTL_INSTANCE_EXTEND_MIN/MAX bump |
+//! | `KEY_UNPAUSE_AFTER` | `UNPAFTER` | instance | instance: contract-wide TTL_INSTANCE_EXTEND_MIN/MAX bump |
+//! | `KEY_GROSS_TOTAL` | `GROSST` | instance | instance: contract-wide TTL_INSTANCE_EXTEND_MIN/MAX bump |
+//! | `KEY_IPFS_CID` | `IPFSCID` | none | reserved: declared but not read or written |
+//! | `KEY_YIELD_CONFIG` | `YLDCFG` | instance | instance: contract-wide TTL_INSTANCE_EXTEND_MIN/MAX bump |
+//! | `KEY_YIELD_TOTAL` | `YLDTOT` | instance | instance: contract-wide TTL_INSTANCE_EXTEND_MIN/MAX bump |
+//!
 use soroban_sdk::Symbol;
 
 /// Re-export `DataKey` so it can be imported via `crate::storage::DataKey`
