@@ -27,7 +27,7 @@ pub(crate) fn update_metadata(
     social_links: Option<Vec<String>>,
 ) -> Result<(), ContractError> {
     let inst = env.storage().instance();
-    let status: Status = inst.get(&KEY_STATUS).unwrap();
+    let status: Status = inst.get(&KEY_STATUS).unwrap_or_else(|| soroban_sdk::panic_with_error!(&env, ContractError::NotFound));
     if status != Status::Active {
         return Err(ContractError::NotActive);
     }
@@ -116,12 +116,12 @@ pub(crate) fn update_metadata(
 /// Anchors an IPFS content identifier (CID) on-chain for the campaign.
 pub(crate) fn update_ipfs_cid(env: Env, cid: String) -> Result<(), ContractError> {
     let inst = env.storage().instance();
-    let status: Status = inst.get(&KEY_STATUS).unwrap();
+    let status: Status = inst.get(&KEY_STATUS).unwrap_or_else(|| soroban_sdk::panic_with_error!(&env, ContractError::NotFound));
     if status != Status::Active {
         return Err(ContractError::NotActive);
     }
     require_auth_creator(&env)?;
-    let creator: Address = inst.get(&KEY_CREATOR).unwrap();
+    let creator: Address = inst.get(&KEY_CREATOR).unwrap_or_else(|| soroban_sdk::panic_with_error!(&env, ContractError::NotFound));
     creator.require_auth();
     let ipfs_key = metadata_field_key(MetadataField::IpfsCid);
 

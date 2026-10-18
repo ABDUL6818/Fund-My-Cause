@@ -93,12 +93,12 @@ fn apply_vesting_schedule(
 pub(crate) fn withdraw(env: Env) -> Result<(), ContractError> {
     // === Batch all instance reads up-front
     let inst = env.storage().instance();
-    let status: Status = inst.get(&KEY_STATUS).unwrap();
+    let status: Status = inst.get(&KEY_STATUS).unwrap_or_else(|| soroban_sdk::panic_with_error!(&env, ContractError::NotFound));
     let creator = require_auth_creator(&env)?;
-    let deadline: u64 = inst.get(&KEY_DEADLINE).unwrap();
-    let goal: i128 = inst.get(&KEY_GOAL).unwrap();
-    let total: i128 = inst.get(&KEY_TOTAL).unwrap();
-    let token_address: Address = inst.get(&KEY_TOKEN).unwrap();
+    let deadline: u64 = inst.get(&KEY_DEADLINE).unwrap_or_else(|| soroban_sdk::panic_with_error!(&env, ContractError::NotFound));
+    let goal: i128 = inst.get(&KEY_GOAL).unwrap_or_else(|| soroban_sdk::panic_with_error!(&env, ContractError::NotFound));
+    let total: i128 = inst.get(&KEY_TOTAL).unwrap_or_else(|| soroban_sdk::panic_with_error!(&env, ContractError::NotFound));
+    let token_address: Address = inst.get(&KEY_TOKEN).unwrap_or_else(|| soroban_sdk::panic_with_error!(&env, ContractError::NotFound));
     let platform_config: Option<PlatformConfig> = inst.get(&KEY_PLATFORM);
     let vesting: Option<VestingSchedule> = inst.get(&KEY_VESTING);
     // #694: use soft_cap as success threshold when set
@@ -177,7 +177,7 @@ pub(crate) fn set_stream_config(
         return Err(ContractError::InvalidInput);
     }
 
-    let status: Status = inst.get(&KEY_STATUS).unwrap();
+    let status: Status = inst.get(&KEY_STATUS).unwrap_or_else(|| soroban_sdk::panic_with_error!(&env, ContractError::NotFound));
     if status != Status::Active {
         return Err(ContractError::NotActive);
     }
@@ -204,10 +204,10 @@ pub(crate) fn claim_stream(env: Env) -> Result<(), ContractError> {
         .ok_or(ContractError::StreamNotConfigured)?;
 
     let now = env.ledger().timestamp();
-    let deadline: u64 = inst.get(&KEY_DEADLINE).unwrap();
-    let goal: i128 = inst.get(&KEY_GOAL).unwrap();
-    let total: i128 = inst.get(&KEY_TOTAL).unwrap();
-    let status: Status = inst.get(&KEY_STATUS).unwrap();
+    let deadline: u64 = inst.get(&KEY_DEADLINE).unwrap_or_else(|| soroban_sdk::panic_with_error!(&env, ContractError::NotFound));
+    let goal: i128 = inst.get(&KEY_GOAL).unwrap_or_else(|| soroban_sdk::panic_with_error!(&env, ContractError::NotFound));
+    let total: i128 = inst.get(&KEY_TOTAL).unwrap_or_else(|| soroban_sdk::panic_with_error!(&env, ContractError::NotFound));
+    let status: Status = inst.get(&KEY_STATUS).unwrap_or_else(|| soroban_sdk::panic_with_error!(&env, ContractError::NotFound));
 
     // Campaign must be complete (either still Active past deadline, or Successful)
     if status == Status::Active && now < deadline {
@@ -240,7 +240,7 @@ pub(crate) fn claim_stream(env: Env) -> Result<(), ContractError> {
 
     // Deduct platform fee pro-rata on first claim if configured
     let platform_config: Option<PlatformConfig> = inst.get(&KEY_PLATFORM);
-    let token_address: Address = inst.get(&KEY_TOKEN).unwrap();
+    let token_address: Address = inst.get(&KEY_TOKEN).unwrap_or_else(|| soroban_sdk::panic_with_error!(&env, ContractError::NotFound));
     let token_client = token::Client::new(&env, &token_address);
     let fee = if stream.claimed == 0 {
         deduct_platform_fee(&env, &token_client, &platform_config, total, false)
