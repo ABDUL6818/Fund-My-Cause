@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **Crowdfund event topics renamed from `("campaign", <event>)` to `("crowdfund", <event>)`** (see
+  ADR-010). Event names and payloads are unchanged. Indexers must subscribe to the `crowdfund`
+  scope for campaign events; events emitted before this release keep the old scope on the ledger.
+
 ### Removed
 - **Deprecated `/health` endpoint** — removed the legacy `GET /health` route from
   `backend/recommendations/service.py` and `backend/fraud_detection/pipeline.py`. It was a

@@ -92,7 +92,7 @@ pub(crate) fn update_metadata(
     );
 
     env.events().publish(
-        ("campaign", "metadata_updated"),
+        ("crowdfund", "metadata_updated"),
         EventMetadataUpdated {
             updated_title,
             updated_description,
@@ -100,7 +100,7 @@ pub(crate) fn update_metadata(
         },
     );
     env.events().publish(
-        ("campaign", "metadata_versioned"),
+        ("crowdfund", "metadata_versioned"),
         EventMetadataVersioned {
             version,
             timestamp: now,
@@ -139,7 +139,7 @@ pub(crate) fn update_ipfs_cid(env: Env, cid: String) -> Result<(), ContractError
     inst.set(&ipfs_key, &cid);
     let now = env.ledger().timestamp();
     env.events().publish(
-        ("campaign", "ipfs_cid_updated"),
+        ("crowdfund", "ipfs_cid_updated"),
         EventIpfsCidUpdated {
             cid,
             timestamp: now,
