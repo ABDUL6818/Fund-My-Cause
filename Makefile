@@ -1,4 +1,4 @@
-.PHONY: help test-contract deploy-testnet dev-frontend test-frontend lint install-deps clean format fmt-check build size test docs docs-open docs-check
+.PHONY: contracts-size help test-contract deploy-testnet dev-frontend test-frontend lint install-deps clean format fmt-check build size test docs docs-open docs-check
 
 # Default target - show help
 help: ## Show this help
@@ -27,8 +27,11 @@ size: ## Build contracts and report WASM binary sizes
 	@echo "=== WASM Binary Sizes ==="
 	@ls -lh target/wasm32-unknown-unknown/release/*.wasm
 	@echo ""
-	@echo "=== Size Budget (256 KiB per contract) ==="
-	@python3 scripts/check_wasm_size.py target/wasm32-unknown-unknown/release/*.wasm
+	@echo "=== Size Budget ($$(cat contracts/crowdfund/WASM_BUDGET_BYTES) bytes per contract, see contracts/crowdfund/README.md) ==="
+	@python3 scripts/check_wasm_size.py --budget $$(cat contracts/crowdfund/WASM_BUDGET_BYTES) target/wasm32-unknown-unknown/release/*.wasm
+
+# Same check as `size`, under the name the contracts docs use. Fails when any WASM exceeds the budget.
+contracts-size: size ## Alias for `size`: fail if any contract WASM is over the budget
 
 # Run all tests
 test: test-contract test-frontend ## Run all tests (contracts + frontend)
