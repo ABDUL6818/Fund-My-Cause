@@ -929,9 +929,11 @@ impl CrowdfundContract {
             }
         }
 
-        let total: i128 = inst.get(&KEY_TOTAL).unwrap();
+        let total: i128 = inst.get(&KEY_TOTAL).unwrap_or(0);
         if total > 0 {
-            let token_address: Address = inst.get(&KEY_TOKEN).unwrap();
+            let token_address: Address = inst
+                .get(&KEY_TOKEN)
+                .ok_or(ContractError::NotInitialized)?;
             token::Client::new(&env, &token_address).transfer(
                 &env.current_contract_address(),
                 &admin,
@@ -1185,14 +1187,18 @@ impl CrowdfundContract {
         }
 
         // Require campaign to be Active before accepting sponsor escrow
-        let status: Status = inst.get(&KEY_STATUS).unwrap();
+        let status: Status = inst
+            .get(&KEY_STATUS)
+            .ok_or(ContractError::NotInitialized)?;
         if status != Status::Active {
             return Err(ContractError::NotActive);
         }
 
         // ── Escrow matching funds from sponsor into the contract ──────────────
         sponsor.require_auth();
-        let token_address: Address = inst.get(&KEY_TOKEN).unwrap();
+        let token_address: Address = inst
+            .get(&KEY_TOKEN)
+            .ok_or(ContractError::NotInitialized)?;
         token::Client::new(&env, &token_address).transfer(
             &sponsor,
             env.current_contract_address(),
@@ -1266,12 +1272,16 @@ impl CrowdfundContract {
     /// * `Err(ContractError::NotActive)` if campaign is not Active
     pub fn update_category(env: Env, category: Category) -> Result<(), ContractError> {
         let inst = env.storage().instance();
-        let status: Status = inst.get(&KEY_STATUS).unwrap();
+        let status: Status = inst
+            .get(&KEY_STATUS)
+            .ok_or(ContractError::NotInitialized)?;
         if status != Status::Active {
             return Err(ContractError::NotActive);
         }
         validate_category(&category)?;
-        let creator: Address = inst.get(&KEY_CREATOR).unwrap();
+        let creator: Address = inst
+            .get(&KEY_CREATOR)
+            .ok_or(ContractError::NotInitialized)?;
         creator.require_auth();
 
         let old_category: Category = inst.get(&KEY_CATEGORY).unwrap_or(Category::Other);
@@ -1433,7 +1443,9 @@ impl CrowdfundContract {
         let inst = env.storage().instance();
         let creator = require_auth_creator(&env)?;
 
-        let current_deadline: u64 = inst.get(&KEY_DEADLINE).unwrap();
+        let current_deadline: u64 = inst
+            .get(&KEY_DEADLINE)
+            .ok_or(ContractError::NotInitialized)?;
         validate_deadline_extension(new_deadline, current_deadline)?;
 
         let now = env.ledger().timestamp();
@@ -3771,7 +3783,9 @@ impl CrowdfundContract {
         let inst = env.storage().instance();
         let creator = require_auth_creator(&env)?;
 
-        let status: Status = inst.get(&KEY_STATUS).unwrap();
+        let status: Status = inst
+            .get(&KEY_STATUS)
+            .ok_or(ContractError::NotInitialized)?;
         if status != Status::Active {
             return Err(ContractError::NotActive);
         }
@@ -3993,17 +4007,23 @@ impl CrowdfundContract {
     /// Must be called while the campaign is `Active`.
     pub fn set_caps(env: Env, soft_cap: i128, stretch_goal: i128) -> Result<(), ContractError> {
         let inst = env.storage().instance();
-        let status: Status = inst.get(&KEY_STATUS).unwrap();
+        let status: Status = inst
+            .get(&KEY_STATUS)
+            .ok_or(ContractError::NotInitialized)?;
         if status != Status::Active {
             return Err(ContractError::NotActive);
         }
-        let creator: Address = inst.get(&KEY_CREATOR).unwrap();
+        let creator: Address = inst
+            .get(&KEY_CREATOR)
+            .ok_or(ContractError::NotInitialized)?;
         creator.require_auth();
 
         if soft_cap < 0 || stretch_goal < 0 {
             return Err(ContractError::InvalidGoal);
         }
-        let goal: i128 = inst.get(&KEY_GOAL).unwrap();
+        let goal: i128 = inst
+            .get(&KEY_GOAL)
+            .ok_or(ContractError::NotInitialized)?;
         // soft_cap must not exceed the hard goal; stretch_goal must be >= goal
         if soft_cap > 0 && soft_cap > goal {
             return Err(ContractError::InvalidGoal);
@@ -4156,6 +4176,29 @@ mod panic_safety_tests {
             &None,
         );
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_no_panic_on_uninitialized_admin_paths() {
+        let env = Env::default();
+        let client = setup_client(&env);
+        let addr = Address::generate(&env);
+
+        // Admin/creator-only entry points on an uninitialized contract must
+        // return a typed error instead of panicking on a missing storage key.
+        assert!(client.try_pause().is_err());
+        assert!(client.try_resume().is_err());
+        assert!(client.try_execute_emergency_withdrawal().is_err());
+        assert!(client.try_cancel_emergency_withdrawal().is_err());
+        assert!(client.try_set_caps(&0, &0).is_err());
+        assert!(client.try_update_category(&Category::Other).is_err());
+        assert!(client.try_propose_extension(&1_000_000).is_err());
+        assert!(client
+            .try_setup_matching(&addr, &10_000, &1_000)
+            .is_err());
+        assert!(client
+            .try_configure_yield(&addr, &1_000, &500)
+            .is_err());
     }
 
     #[test]

@@ -684,6 +684,150 @@ fn update_metadata_with_valid_title_succeeds() {
     assert_eq!(client.title(), String::from_str(&env, "New Title"));
 }
 
+// ── Metadata limit tests (#1569) ──────────────────────────────────────────────
+//
+// `metadata.rs` enforces the following size/content limits:
+//   * title:       non-empty, <= 64 bytes
+//   * description: non-empty, <= 256 bytes
+//   * social links: <= 128 bytes
+//   * IPFS CID:    non-empty, <= 64 bytes
+//   * history:     bounded number of metadata revisions
+//
+// Each limit below has a reject test (input just over the limit) and an accept
+// test (input exactly at the boundary).
+
+/// Builds a `String` of exactly `len` ASCII bytes.
+fn string_of_len(env: &Env, len: usize) -> String {
+    let mut buf = [b'A'; 512];
+    let s = core::str::from_utf8(&buf[..len]).unwrap();
+    String::from_str(env, s)
+}
+
+// ── Title limits ─────────────────────────────────────────────────────────────
+
+#[test]
+fn update_metadata_title_at_max_length_is_accepted() {
+    let env = setup_env();
+    let (_creator, _token_id, client, _) = setup_contract(&env, 1_000, 10_000, 100);
+
+    let title = string_of_len(&env, 64);
+    client.update_metadata(&Some(title.clone()), &None, &None);
+    assert_eq!(client.title(), title);
+}
+
+#[test]
+fn update_metadata_title_over_max_length_is_rejected() {
+    let env = setup_env();
+    let (_creator, _token_id, client, _) = setup_contract(&env, 1_000, 10_000, 100);
+
+    let title = string_of_len(&env, 65);
+    let result = client.try_update_metadata(&Some(title), &None, &None);
+    assert_eq!(result.err(), Some(Ok(ContractError::StringTooLong)));
+}
+
+// ── Description limits ───────────────────────────────────────────────────────
+
+#[test]
+fn update_metadata_description_at_max_length_is_accepted() {
+    let env = setup_env();
+    let (_creator, _token_id, client, _) = setup_contract(&env, 1_000, 10_000, 100);
+
+    let description = string_of_len(&env, 256);
+    client.update_metadata(&None, &Some(description.clone()), &None);
+    assert_eq!(client.description(), description);
+}
+
+#[test]
+fn update_metadata_description_over_max_length_is_rejected() {
+    let env = setup_env();
+    let (_creator, _token_id, client, _) = setup_contract(&env, 1_000, 10_000, 100);
+
+    let description = string_of_len(&env, 257);
+    let result = client.try_update_metadata(&None, &Some(description), &None);
+    assert_eq!(result.err(), Some(Ok(ContractError::StringTooLong)));
+}
+
+#[test]
+fn update_metadata_with_empty_description_is_rejected() {
+    let env = setup_env();
+    let (_creator, _token_id, client, _) = setup_contract(&env, 1_000, 10_000, 100);
+
+    let result = client.try_update_metadata(&None, &Some(String::from_str(&env, "")), &None);
+    assert_eq!(result.err(), Some(Ok(ContractError::StringEmpty)));
+}
+
+// ── Social link limits ───────────────────────────────────────────────────────
+
+#[test]
+fn update_metadata_social_link_at_max_length_is_accepted() {
+    let env = setup_env();
+    let (_creator, _token_id, client, _) = setup_contract(&env, 1_000, 10_000, 100);
+
+    let link = string_of_len(&env, 128);
+    client.update_metadata(&None, &None, &Some(link.clone()));
+    assert_eq!(client.social_links(), link);
+}
+
+#[test]
+fn update_metadata_social_link_over_max_length_is_rejected() {
+    let env = setup_env();
+    let (_creator, _token_id, client, _) = setup_contract(&env, 1_000, 10_000, 100);
+
+    let link = string_of_len(&env, 129);
+    let result = client.try_update_metadata(&None, &None, &Some(link));
+    assert_eq!(result.err(), Some(Ok(ContractError::StringTooLong)));
+}
+
+// ── IPFS CID limits ──────────────────────────────────────────────────────────
+
+#[test]
+fn update_ipfs_cid_at_max_length_is_accepted() {
+    let env = setup_env();
+    let (_creator, _token_id, client, _) = setup_contract(&env, 1_000, 10_000, 100);
+
+    let cid = string_of_len(&env, 64);
+    client.update_ipfs_cid(&cid);
+    assert_eq!(client.ipfs_cid(), Some(cid));
+}
+
+#[test]
+fn update_ipfs_cid_over_max_length_is_rejected() {
+    let env = setup_env();
+    let (_creator, _token_id, client, _) = setup_contract(&env, 1_000, 10_000, 100);
+
+    let cid = string_of_len(&env, 65);
+    let result = client.try_update_ipfs_cid(&cid);
+    assert_eq!(result.err(), Some(Ok(ContractError::StringTooLong)));
+}
+
+#[test]
+fn update_ipfs_cid_empty_is_rejected() {
+    let env = setup_env();
+    let (_creator, _token_id, client, _) = setup_contract(&env, 1_000, 10_000, 100);
+
+    let result = client.try_update_ipfs_cid(&String::from_str(&env, ""));
+    assert_eq!(result.err(), Some(Ok(ContractError::StringEmpty)));
+}
+
+// ── Metadata history length limit ────────────────────────────────────────────
+
+#[test]
+fn metadata_history_is_bounded() {
+    let env = setup_env();
+    let (_creator, _token_id, client, _) = setup_contract(&env, 1_000, 10_000, 100);
+
+    // Repeated updates must not grow the history without bound; the contract
+    // keeps at most `MAX_METADATA_HISTORY` revisions.
+    for i in 0..(MAX_METADATA_HISTORY + 5) {
+        let title = String::from_str(&env, "Title");
+        let _ = i;
+        client.update_metadata(&Some(title), &None, &None);
+    }
+
+    let history = client.get_metadata_history();
+    assert!(history.len() <= MAX_METADATA_HISTORY);
+}
+
 // ── Rate limit tests (#428) ───────────────────────────────────────────────────
 
 #[test]

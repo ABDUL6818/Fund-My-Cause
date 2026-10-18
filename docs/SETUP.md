@@ -138,6 +138,24 @@ WASM artifacts are generated in `target/wasm32-unknown-unknown/release/`.
 npm run contracts:test
 ```
 
+#### WASM Size Budget
+The release `crowdfund` WASM is kept under a documented size budget so it cannot
+grow unnoticed. The budget lives in `scripts/check_wasm_size.py` (see
+[contracts/crowdfund/README.md](../contracts/crowdfund/README.md) for the current
+limit and rationale).
+
+```bash
+# Build the release WASM, then check it against the budget
+npm run contracts:build
+make contracts:size
+```
+
+`make contracts:size` runs `scripts/check_wasm_size.py` against
+`target/wasm32-unknown-unknown/release/crowdfund.wasm` and **exits non-zero when
+the artifact exceeds the budget**. Run it before opening a PR that touches the
+contract; if your change legitimately needs more space, raise the budget in the
+same PR and explain why.
+
 #### Deploying & Seeding Testnet
 ```bash
 # Generate a testnet account and fund it via Friendbot

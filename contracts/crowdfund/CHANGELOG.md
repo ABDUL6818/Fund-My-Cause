@@ -16,6 +16,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Campaign metadata and category management
 
 ### Changed
+- **Event naming/topic migration (issue #1572):** Event names and topics are now aligned with the achievements contract under a single documented convention (see `docs/adr/`). Indexers must update their handlers:
+  - Event names use `PascalCase` (e.g. `CampaignInitialized`, `ContributionReceived`, `CampaignWithdrawn`, `RefundIssued`).
+  - Topic 0 is the event name as a `Symbol`; topic 1 is the primary subject (e.g. campaign id or contributor address).
+  - Previously emitted names/topics are no longer emitted; replaying historical ledgers requires mapping the old names to the new ones.
 - Decomposed monolithic `lib.rs` into modular files (`access`, `analytics`, `contribute`, `lifecycle`, `metadata`, `recurring`, `refund`, `security`, `storage`, `validation`, `views`, `withdraw`) per issues #1137–#1144
 - Extracted shared access control checks into `common::AccessControl` per issue #1147
 - Guarded all previously unguarded arithmetic against overflow per issue #1145

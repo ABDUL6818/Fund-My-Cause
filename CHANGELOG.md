@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **#1572 Unified smart-contract event naming** — `contracts/achievements` and the
+  crowdfund contract now emit events using a single documented convention
+  (`<domain>_<action>` event names, `["fmc", "<domain>", "<action>"]` topics), so one
+  indexer handler can serve both contracts. See `docs/adr/` for the ADR.
+  **Migration note (indexers):** event names and topics changed for both contracts.
+  Indexers must update their topic filters and event-name mappings to the new
+  convention; events emitted before this change keep the old names and should be
+  handled via aliases during the transition window.
+
 ### Removed
 - **Deprecated `/health` endpoint** — removed the legacy `GET /health` route from
   `backend/recommendations/service.py` and `backend/fraud_detection/pipeline.py`. It was a
