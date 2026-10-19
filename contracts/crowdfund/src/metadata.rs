@@ -10,8 +10,7 @@ use crate::{
     errors::ContractError,
     helpers::require_auth_creator,
     storage::{
-        KEY_CREATOR, KEY_DESC, KEY_IPFS_CID, KEY_META_HIST, KEY_SOCIAL, KEY_STATUS, KEY_TITLE,
-        TTL_PERSISTENT_ENTRY,
+        metadata_field_key, MetadataField, KEY_CREATOR, KEY_STATUS, TTL_PERSISTENT_ENTRY,
     },
     types::{
         EventIpfsCidUpdated, EventMetadataUpdated, EventMetadataVersioned, MetadataVersion, Status,
@@ -41,29 +40,34 @@ pub(crate) fn update_metadata(
     // Validate and capture effective values for the version snapshot.
     // Using `if let Some(ref ...)` borrows without moving, letting us clone
     // here and then move the Option into the storage writes below.
+    let title_key = metadata_field_key(MetadataField::Title);
+    let desc_key = metadata_field_key(MetadataField::Description);
+    let social_key = metadata_field_key(MetadataField::SocialLinks);
+    let meta_hist_key = metadata_field_key(MetadataField::History);
+
     let effective_title: String = if let Some(ref t) = title {
         validate_string_length(t, 64)?;
         t.clone()
     } else {
-        inst.get(&KEY_TITLE)
+        inst.get(&title_key)
             .unwrap_or_else(|| String::from_str(&env, ""))
     };
     let effective_desc: String = if let Some(ref d) = description {
         validate_string_length(d, 512)?;
         d.clone()
     } else {
-        inst.get(&KEY_DESC)
+        inst.get(&desc_key)
             .unwrap_or_else(|| String::from_str(&env, ""))
     };
 
     if let Some(t) = title {
-        inst.set(&KEY_TITLE, &t);
+        inst.set(&title_key, &t);
     }
     if let Some(d) = description {
-        inst.set(&KEY_DESC, &d);
+        inst.set(&desc_key, &d);
     }
     if let Some(l) = social_links {
-        inst.set(&KEY_SOCIAL, &l);
+        inst.set(&social_key, &l);
     }
 
     // Issue #423: store a versioned metadata snapshot
@@ -71,7 +75,7 @@ pub(crate) fn update_metadata(
     let mut meta_hist: Vec<MetadataVersion> = env
         .storage()
         .persistent()
-        .get(&KEY_META_HIST)
+        .get(&meta_hist_key)
         .unwrap_or_else(|| Vec::new(&env));
     let version = meta_hist.len();
     meta_hist.push_back(MetadataVersion {
@@ -80,9 +84,9 @@ pub(crate) fn update_metadata(
         description: effective_desc,
         timestamp: now,
     });
-    env.storage().persistent().set(&KEY_META_HIST, &meta_hist);
+    env.storage().persistent().set(&meta_hist_key, &meta_hist);
     env.storage().persistent().extend_ttl(
-        &KEY_META_HIST,
+        &meta_hist_key,
         TTL_PERSISTENT_ENTRY,
         TTL_PERSISTENT_ENTRY,
     );
@@ -117,6 +121,9 @@ pub(crate) fn update_ipfs_cid(env: Env, cid: String) -> Result<(), ContractError
         return Err(ContractError::NotActive);
     }
     require_auth_creator(&env)?;
+    let creator: Address = inst.get(&KEY_CREATOR).unwrap();
+    creator.require_auth();
+    let ipfs_key = metadata_field_key(MetadataField::IpfsCid);
 
     // Validate CID length: v0 (base58 "Qm…", len 46) or v1 (base32 "bafy…", len >= 59).
     // Byte-level prefix inspection is intentionally omitted: Soroban `String`
@@ -129,7 +136,7 @@ pub(crate) fn update_ipfs_cid(env: Env, cid: String) -> Result<(), ContractError
         return Err(ContractError::InvalidInput);
     }
 
-    inst.set(&KEY_IPFS_CID, &cid);
+    inst.set(&ipfs_key, &cid);
     let now = env.ledger().timestamp();
     env.events().publish(
         ("campaign", "ipfs_cid_updated"),
@@ -143,13 +150,15 @@ pub(crate) fn update_ipfs_cid(env: Env, cid: String) -> Result<(), ContractError
 
 /// Returns the stored IPFS CID for this campaign, if one has been set.
 pub(crate) fn get_ipfs_cid(env: Env) -> Option<String> {
-    env.storage().instance().get(&KEY_IPFS_CID)
+    env.storage()
+        .instance()
+        .get(&metadata_field_key(MetadataField::IpfsCid))
 }
 
 /// Returns the full metadata version history for this campaign.
 pub(crate) fn get_metadata_history(env: Env) -> Vec<MetadataVersion> {
     env.storage()
         .persistent()
-        .get(&KEY_META_HIST)
+        .get(&metadata_field_key(MetadataField::History))
         .unwrap_or_else(|| Vec::new(&env))
 }

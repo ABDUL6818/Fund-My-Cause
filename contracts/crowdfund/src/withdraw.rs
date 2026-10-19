@@ -24,6 +24,8 @@ use crate::{
     validation::validate_deadline_passed,
 };
 
+use common::math::apply_bps;
+
 // === Shared helpers
 
 /// Transfers the platform fee out of the campaign balance and returns the fee taken.
@@ -44,11 +46,7 @@ fn deduct_platform_fee(
             if respect_fee_mode && config.fee_mode == FeeMode::OnContribution {
                 0
             } else {
-                // Issue #1145: use checked_mul to prevent overflow on large base amounts
-                let fee = base
-                    .checked_mul(config.fee_bps as i128)
-                    .and_then(|v| v.checked_div(10_000))
-                    .unwrap_or(0);
+                let fee = apply_bps(base, config.fee_bps).unwrap_or(0);
                 token_client.transfer(&env.current_contract_address(), &config.address, &fee);
                 fee
             }
@@ -171,6 +169,7 @@ pub(crate) fn set_stream_config(
     start_time: u64,
     end_time: u64,
 ) -> Result<(), ContractError> {
+    let inst = env.storage().instance();
     require_auth_creator(&env)?;
 
     let now = env.ledger().timestamp();
@@ -198,6 +197,7 @@ pub(crate) fn set_stream_config(
 /// Claims the portion of streamed funds that has unlocked since the last claim.
 pub(crate) fn claim_stream(env: Env) -> Result<(), ContractError> {
     let creator = require_auth_creator(&env)?;
+    let inst = env.storage().instance();
 
     let mut stream: StreamConfig = inst
         .get(&KEY_STREAM)
@@ -283,6 +283,7 @@ pub(crate) fn claim_stream(env: Env) -> Result<(), ContractError> {
 
 /// Records that `amount` stroops have been released to the creator.
 pub(crate) fn record_release(env: Env, amount: i128) -> Result<(), ContractError> {
+    let inst = env.storage().instance();
     if amount <= 0 {
         return Err(ContractError::AmountNotPositive);
     }

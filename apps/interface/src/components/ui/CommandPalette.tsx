@@ -220,7 +220,9 @@ export function CommandPalette({ isOpen, onClose }: CommandPaletteProps) {
             className="flex-1 bg-transparent border-none outline-none text-gray-900 dark:text-white placeholder-gray-500"
           />
           <button
+            type="button"
             onClick={onClose}
+            aria-label="Close command palette"
             className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-400 transition"
           >
             <X size={16} />

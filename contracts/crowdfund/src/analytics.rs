@@ -13,7 +13,7 @@ use crate::{
         KEY_START_TIME, KEY_STRETCH_GOAL, KEY_TOTAL,
     },
     types::{
-        CampaignAnalytics, CampaignStats, ContributionRecord, EventInvariantViolated,
+        CampaignAnalytics, CampaignStats, ContributionHistory, EventInvariantViolated,
         EventStateValidated, PerformanceMetrics, QfContributorInput, QfInputs,
         StateValidationResult,
     },
@@ -159,7 +159,7 @@ pub(crate) fn get_performance_metrics(env: Env) -> PerformanceMetrics {
             Some(addr) => addr,
             None => continue,
         };
-        let history: Vec<ContributionRecord> = env
+        let history: Vec<ContributionHistory> = env
             .storage()
             .persistent()
             .get(&DataKey::ContributionHistory(contributor.clone()))

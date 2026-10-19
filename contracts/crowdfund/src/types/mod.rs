@@ -15,10 +15,10 @@ pub mod events;
 // ── Re-export all domain types ────────────────────────────────────────────────
 pub use domain::{
     AnalyticsDataPoint, CampaignAnalytics, CampaignInfo, CampaignStats, CampaignTemplate,
-    CampaignUpdate, Category, ContractStateSnapshot, ContributionRecord, DataKey, Delegation,
+    CampaignUpdate, Category, ContractStateSnapshot, ContributionHistory, DataKey, Delegation,
     Dispute, DisputeStatus, ExecutionRecord, ExtensionProposal, FeeMode, FunctionPerfStats,
     GoalAdjustment, GovernanceConfig, GovernanceProposal, InsuranceConfig, MatchingConfig,
-    MetadataVersion, Milestone, MilestoneStatus, PerformanceMetrics, PlatformConfig,
+    MetadataVersion, FundingMilestone, MilestoneStatus, PerformanceMetrics, PlatformConfig,
     QfContributorInput, QfInputs, RateLimit, RecurringPlan, RewardConfig, RewardTier,
     SearchIndexEntry, StateValidationResult, Status, StreamConfig, TemplateType,
     VerificationStatus, VersionMigration, VestingSchedule, Visibility, YieldConfig, YieldInfo,

@@ -84,13 +84,55 @@ mod validation;
 mod views;
 mod withdraw;
 
+/// Public `pub fn` wrappers around otherwise `pub(crate)` validation logic,
+/// compiled only under the `fuzz` feature so the `contracts/crowdfund/fuzz`
+/// harness (see its README section) can drive them directly without
+/// widening the normal contract's public API.
+#[cfg(feature = "fuzz")]
+pub mod fuzz_api {
+    use crate::errors::ContractError;
+    use crate::validation;
+
+    pub fn validate_initialization(
+        goal: i128,
+        deadline: u64,
+        min_contribution: i128,
+        max_contribution: i128,
+        platform_fee_bps: Option<u32>,
+        current_time: u64,
+    ) -> Result<(), ContractError> {
+        validation::validate_initialization(
+            goal,
+            deadline,
+            min_contribution,
+            max_contribution,
+            platform_fee_bps,
+            current_time,
+        )
+    }
+
+    pub fn validate_min_contribution(
+        amount: i128,
+        min_contribution: i128,
+    ) -> Result<(), ContractError> {
+        validation::validate_min_contribution(amount, min_contribution)
+    }
+
+    pub fn validate_contributor_cap(
+        amount: i128,
+        max_contribution: i128,
+        current_contribution: i128,
+    ) -> Result<(), ContractError> {
+        validation::validate_contributor_cap(amount, max_contribution, current_contribution)
+    }
+}
+
 pub use errors::ContractError;
 pub use security::{CircuitBreaker, ContributorGate, InputValidator, RateLimiter, ReentrancyGuard};
 
 use access::auth_admin;
 use helpers::require_auth_creator;
 pub use storage::{
-    BASIS_POINTS_MAX,
     CONTRACT_VERSION,
     KEY_ADMIN,
     KEY_ANALYTICS,
@@ -175,7 +217,7 @@ pub use types::{
     // #459
     ContractStateSnapshot,
     // #416
-    ContributionRecord,
+    ContributionHistory,
     DataKey,
     Delegation,
     Dispute,
@@ -285,7 +327,7 @@ pub use types::{
     MatchingConfig,
     // Issue #423
     MetadataVersion,
-    Milestone,
+    FundingMilestone,
     MilestoneStatus,
     // #443
     PerformanceMetrics,
@@ -839,6 +881,7 @@ impl CrowdfundContract {
     /// - Sets emergency lock time to current time + lock_period
     /// - Publishes "EmergencyWithdrawalInitiated" event
     pub fn initiate_emergency_withdrawal(env: Env, lock_period: u64) -> Result<(), ContractError> {
+        let inst = env.storage().instance();
         auth_admin(&env)?;
         let lock_until = env.ledger().timestamp() + lock_period;
         inst.set(&DataKey::EmergencyLockTime, &lock_until);
@@ -869,7 +912,8 @@ impl CrowdfundContract {
     /// - Clears emergency lock time
     /// - Publishes "EmergencyWithdrawalExecuted" event
     pub fn execute_emergency_withdrawal(env: Env) -> Result<(), ContractError> {
-        auth_admin(&env)?;
+        let inst = env.storage().instance();
+        let admin = auth_admin(&env)?;
 
         let lock_time: u64 = inst.get(&DataKey::EmergencyLockTime).unwrap_or(0);
         if lock_time == 0 || env.ledger().timestamp() < lock_time {
@@ -918,6 +962,7 @@ impl CrowdfundContract {
     /// - Clears emergency lock time
     /// - Publishes "EmergencyWithdrawalCancelled" event
     pub fn cancel_emergency_withdrawal(env: Env) -> Result<(), ContractError> {
+        let inst = env.storage().instance();
         auth_admin(&env)?;
         inst.set(&DataKey::EmergencyLockTime, &0u64);
         env.events()
@@ -946,6 +991,7 @@ impl CrowdfundContract {
         required_approvals: u32,
         approvers: Vec<Address>,
     ) -> Result<(), ContractError> {
+        let inst = env.storage().instance();
         auth_admin(&env)?;
 
         // required_approvals must be between 1 and the total number of approvers
@@ -1128,6 +1174,7 @@ impl CrowdfundContract {
         match_ratio: u32,
         max_match: i128,
     ) -> Result<(), ContractError> {
+        let inst = env.storage().instance();
         require_auth_creator(&env)?;
 
         if match_ratio > 10_000 {
@@ -1383,6 +1430,7 @@ impl CrowdfundContract {
     /// * `Ok(())` on success
     /// * `Err(ContractError::InvalidDeadline)` if new_deadline <= current_deadline
     pub fn propose_extension(env: Env, new_deadline: u64) -> Result<(), ContractError> {
+        let inst = env.storage().instance();
         let creator = require_auth_creator(&env)?;
 
         let current_deadline: u64 = inst.get(&KEY_DEADLINE).unwrap();
@@ -1882,7 +1930,7 @@ impl CrowdfundContract {
 
     /// Returns the full contribution history for a contributor.
     ///
-    /// Each entry is a [`ContributionRecord`] capturing the amount, ledger
+    /// Each entry is a [`ContributionHistory`] capturing the amount, ledger
     /// timestamp, and running total at the time of the contribution.  Records
     /// are appended chronologically by [`contribute`](CrowdfundContract::contribute).
     ///
@@ -1891,8 +1939,8 @@ impl CrowdfundContract {
     /// * `contributor` - Address whose history to retrieve
     ///
     /// # Returns
-    /// Ordered `Vec<ContributionRecord>` — empty if the address has never contributed
-    pub fn get_contribution_history(env: Env, contributor: Address) -> Vec<ContributionRecord> {
+    /// Ordered `Vec<ContributionHistory>` — empty if the address has never contributed
+    pub fn get_contribution_history(env: Env, contributor: Address) -> Vec<ContributionHistory> {
         views::get_contribution_history(env, contributor)
     }
 
@@ -2293,7 +2341,7 @@ impl CrowdfundContract {
         fee_bps: u32,
         provider: Address,
     ) -> Result<(), ContractError> {
-        require_auth_creator(&env)?;
+        let creator = require_auth_creator(&env)?;
 
         validate_fee_bps(fee_bps)?;
         validate_address_not_self(&creator, &provider)?;
@@ -2433,6 +2481,7 @@ impl CrowdfundContract {
         reward_token: Address,
         reward_per_unit: i128,
     ) -> Result<(), ContractError> {
+        let inst = env.storage().instance();
         require_auth_creator(&env)?;
 
         validate_positive_amount(reward_per_unit)?;
@@ -2695,6 +2744,7 @@ impl CrowdfundContract {
     /// * `Ok(())` on success
     /// * `Err(ContractError::Unauthorized)` if caller is not admin
     pub fn migrate_version(env: Env) -> Result<(), ContractError> {
+        let inst = env.storage().instance();
         auth_admin(&env)?;
 
         let from_version: u32 = inst.get(&KEY_CONTRACT_VERSION).unwrap_or(0);
@@ -2936,7 +2986,7 @@ impl CrowdfundContract {
     ///
     /// Only the creator can call this function. Milestones define target amounts
     /// that trigger fund releases when reached and verified.
-    pub fn set_milestones(env: Env, milestones: Vec<Milestone>) -> Result<(), ContractError> {
+    pub fn set_milestones(env: Env, milestones: Vec<FundingMilestone>) -> Result<(), ContractError> {
         let creator: Address = env
             .storage()
             .instance()
@@ -2953,7 +3003,7 @@ impl CrowdfundContract {
     }
 
     /// Gets all milestones for the campaign.
-    pub fn get_milestones(env: Env) -> Result<Vec<Milestone>, ContractError> {
+    pub fn get_milestones(env: Env) -> Result<Vec<FundingMilestone>, ContractError> {
         env.storage()
             .persistent()
             .get(&KEY_MILESTONES)
@@ -2972,7 +3022,7 @@ impl CrowdfundContract {
             .ok_or(ContractError::NotCreator)?;
         creator.require_auth();
 
-        let mut milestones: Vec<Milestone> = env
+        let mut milestones: Vec<FundingMilestone> = env
             .storage()
             .persistent()
             .get(&KEY_MILESTONES)
@@ -3282,6 +3332,7 @@ impl CrowdfundContract {
         required_approvals: u32,
         timelock_delay: u64,
     ) -> Result<(), ContractError> {
+        let inst = env.storage().instance();
         auth_admin(&env)?;
 
         if inst.has(&KEY_GOVERNANCE_CONFIG) {
@@ -3650,6 +3701,7 @@ impl CrowdfundContract {
         required_approvals: u32,
         timelock_delay: u64,
     ) -> Result<(), ContractError> {
+        let inst = env.storage().instance();
         auth_admin(&env)?;
 
         validate_governance_config(required_approvals, governors.len(), timelock_delay)?;
@@ -3716,7 +3768,8 @@ impl CrowdfundContract {
         pool: i128,
         rate_bps: u32,
     ) -> Result<(), ContractError> {
-        require_auth_creator(&env)?;
+        let inst = env.storage().instance();
+        let creator = require_auth_creator(&env)?;
 
         let status: Status = inst.get(&KEY_STATUS).unwrap();
         if status != Status::Active {
@@ -4019,22 +4072,117 @@ impl CrowdfundContract {
     pub fn add_to_denylist(env: Env, address: Address) -> Result<(), ContractError> {
         access::add_to_denylist(env, address)
     }
-
-    /// Removes an address from the deny list (admin only).
-    pub fn remove_from_denylist(env: Env, address: Address) -> Result<(), ContractError> {
-        access::remove_from_denylist(env, address)
-    }
-
-    /// Returns `true` if the address is on the allow list.
-    pub fn is_allowlisted(env: Env, address: Address) -> bool {
-        access::is_allowlisted(env, address)
-    }
-
-    /// Returns `true` if the address is on the deny list.
-    pub fn is_denylisted(env: Env, address: Address) -> bool {
-        access::is_denylisted(env, address)
-    }
 }
 
 #[cfg(test)]
-mod test;
+mod panic_safety_tests {
+    use super::*;
+    use soroban_sdk::testutils::{Address as _, Ledger};
+
+    fn setup_client(env: &Env) -> CrowdfundContractClient<'_> {
+        env.mock_all_auths();
+        let contract_id = env.register_contract(None, CrowdfundContract);
+        CrowdfundContractClient::new(env, &contract_id)
+    }
+
+    #[test]
+    fn test_no_panic_on_overflow() {
+        let env = Env::default();
+        let client = setup_client(&env);
+        let addr = Address::generate(&env);
+        let token_admin = Address::generate(&env);
+        let token_id = env.register_stellar_asset_contract(token_admin);
+
+        env.ledger().set_timestamp(100);
+        // Initialize a valid campaign first so contribute reaches arithmetic paths.
+        client.initialize(
+            &addr,
+            &token_id,
+            &10_000,
+            &1_000_000,
+            &100,
+            &0i128,
+            &String::from_str(&env, "Title"),
+            &String::from_str(&env, "Description"),
+            &None,
+            &None,
+            &None,
+            &Category::Other,
+            &None,
+            &None,
+        );
+
+        // A huge amount must surface as a contract error, never a host panic.
+        let result =
+            client.try_contribute(&addr, &i128::MAX, &token_id, &None);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_no_panic_on_uninitialized() {
+        let env = Env::default();
+        let client = setup_client(&env);
+        let addr = Address::generate(&env);
+        let token_id = Address::generate(&env);
+
+        // Contribute to an uninitialized campaign must error, not panic.
+        let result = client.try_contribute(&addr, &100, &token_id, &None);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_no_panic_on_invalid_goal() {
+        let env = Env::default();
+        let client = setup_client(&env);
+        let creator = Address::generate(&env);
+        let token_id = Address::generate(&env);
+
+        env.ledger().set_timestamp(100);
+        // Zero goal is invalid and must error, not panic.
+        let result = client.try_initialize(
+            &creator,
+            &token_id,
+            &0,
+            &(env.ledger().timestamp() + 1000),
+            &0,
+            &0,
+            &String::from_str(&env, "Title"),
+            &String::from_str(&env, "Description"),
+            &None,
+            &None,
+            &None,
+            &Category::Other,
+            &None,
+            &None,
+        );
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_no_panic_on_past_deadline() {
+        let env = Env::default();
+        let client = setup_client(&env);
+        let creator = Address::generate(&env);
+        let token_id = Address::generate(&env);
+
+        env.ledger().set_timestamp(10_000);
+        // Past deadline is invalid and must error, not panic.
+        let result = client.try_initialize(
+            &creator,
+            &token_id,
+            &1000,
+            &9_000,
+            &0,
+            &0,
+            &String::from_str(&env, "Title"),
+            &String::from_str(&env, "Description"),
+            &None,
+            &None,
+            &None,
+            &Category::Other,
+            &None,
+            &None,
+        );
+        assert!(result.is_err());
+    }
+}

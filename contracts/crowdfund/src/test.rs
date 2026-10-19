@@ -2247,3 +2247,84 @@ fn claim_stream_without_config_is_rejected() {
     let r = client.try_claim_stream();
     assert_eq!(r.err(), Some(Ok(ContractError::StreamNotConfigured)));
 }
+
+// === Access-control negative tests (issue #1484) ===
+//
+// Every privileged entry point below authorises through
+// `common::AccessControl` (via `auth_admin` or `require_auth_creator`). These
+// tests pin the rejection behaviour of each replaced check.
+
+/// An uninitialised contract has no stored admin or creator, so every gated
+/// entry point must return the typed `InvalidAddress` error, not panic.
+#[test]
+fn access_control_checks_reject_uninitialized_contract() {
+    let env = setup_env();
+    let contract_id = env.register_contract(None, CrowdfundContract);
+    let client = CrowdfundContractClient::new(&env, &contract_id);
+    let other = Address::generate(&env);
+
+    assert_eq!(
+        client.try_add_to_whitelist(&other).err(),
+        Some(Ok(ContractError::InvalidAddress))
+    );
+    assert_eq!(
+        client.try_remove_from_whitelist(&other).err(),
+        Some(Ok(ContractError::InvalidAddress))
+    );
+    assert_eq!(
+        client.try_add_to_blacklist(&other).err(),
+        Some(Ok(ContractError::InvalidAddress))
+    );
+    assert_eq!(
+        client.try_set_whitelist_only(&true).err(),
+        Some(Ok(ContractError::InvalidAddress))
+    );
+    assert_eq!(
+        client.try_add_to_allowlist(&other).err(),
+        Some(Ok(ContractError::InvalidAddress))
+    );
+    assert_eq!(
+        client.try_remove_from_allowlist(&other).err(),
+        Some(Ok(ContractError::InvalidAddress))
+    );
+    assert_eq!(
+        client.try_transfer_ownership(&other).err(),
+        Some(Ok(ContractError::InvalidAddress))
+    );
+}
+
+/// Creator-gated checks must reject a call that carries no creator
+/// authorisation and must not modify the stored lists.
+#[test]
+fn creator_gated_checks_reject_unauthorised_callers() {
+    let env = setup_env();
+    let (_creator, _token_id, client, _token_admin) = setup_contract(&env, 1_000, 100_000, 100);
+    let target = Address::generate(&env);
+
+    // Drop every mocked authorisation so no caller is authorised.
+    env.mock_auths(&[]);
+
+    assert!(client.try_add_to_whitelist(&target).is_err());
+    assert!(client.try_add_to_blacklist(&target).is_err());
+    assert!(client.try_set_whitelist_only(&true).is_err());
+    assert!(client.try_transfer_ownership(&target).is_err());
+
+    assert!(!client.is_whitelisted(&target));
+    assert!(!client.is_blacklisted(&target));
+}
+
+/// Admin-gated allow-list checks must reject a call that carries no admin
+/// authorisation and must not modify the allow list.
+#[test]
+fn admin_gated_checks_reject_unauthorised_callers() {
+    let env = setup_env();
+    let (_creator, _token_id, client, _token_admin) = setup_contract(&env, 1_000, 100_000, 100);
+    let target = Address::generate(&env);
+
+    env.mock_auths(&[]);
+
+    assert!(client.try_add_to_allowlist(&target).is_err());
+    assert!(client.try_remove_from_allowlist(&target).is_err());
+
+    assert!(!client.is_whitelisted(&target));
+}
