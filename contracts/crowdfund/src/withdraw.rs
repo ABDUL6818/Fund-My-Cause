@@ -196,6 +196,7 @@ pub(crate) fn set_stream_config(
 
 /// Claims the portion of streamed funds that has unlocked since the last claim.
 pub(crate) fn claim_stream(env: Env) -> Result<(), ContractError> {
+    let inst = env.storage().instance();
     let creator = require_auth_creator(&env)?;
     let inst = env.storage().instance();
 
