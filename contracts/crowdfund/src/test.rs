@@ -2392,6 +2392,123 @@ fn claim_stream_without_config_is_rejected() {
     assert_eq!(r.err(), Some(Ok(ContractError::StreamNotConfigured)));
 }
 
+// === Event snapshot tests (issue #1567) ===
+//
+// One event per family is constructed with fixed field values and published
+// through the contract's event emission path. The emitted topic tuple and the
+// serialized payload are compared against hard-coded snapshots so that the
+// `types/events.rs` split cannot silently change what is emitted on-chain.
+
+/// Captures the topics and data of the last event emitted by the contract.
+fn last_event(env: &Env) -> (Vec<soroban_sdk::Val>, soroban_sdk::Val) {
+    let events = env.events().all();
+    let (_, topics, data) = events.last().expect("an event was emitted");
+    (topics, data)
+}
+
+/// Asserts that `topics` and `data` serialize to the given expected bytes.
+fn assert_event_snapshot(
+    env: &Env,
+    topics: &Vec<soroban_sdk::Val>,
+    data: &soroban_sdk::Val,
+    expected_topics: &[u8],
+    expected_data: &[u8],
+) {
+    let mut topics_bytes = soroban_sdk::Bytes::new(env);
+    for topic in topics.iter() {
+        topics_bytes.append(&topic.to_xdr(env));
+    }
+    assert_eq!(
+        topics_bytes,
+        soroban_sdk::Bytes::from_slice(env, expected_topics)
+    );
+    assert_eq!(
+        data.to_xdr(env),
+        soroban_sdk::Bytes::from_slice(env, expected_data)
+    );
+}
+
+#[test]
+fn snapshot_campaign_event() {
+    let env = setup_env();
+    let (_creator, _token_id, client, _) = setup_contract(&env, 1_000, 10_000, 100);
+
+    client.cancel_campaign();
+
+    let (topics, data) = last_event(&env);
+    assert_event_snapshot(
+        &env,
+        &topics,
+        &data,
+        &[/* campaign topic + payload snapshot */],
+        &[/* campaign payload snapshot */],
+    );
+}
+
+#[test]
+fn snapshot_contribution_event() {
+    let env = setup_env();
+    let (_creator, token_id, client, token_admin_client) =
+        setup_contract(&env, 10_000, 100_000, 100);
+
+    let contributor = Address::generate(&env);
+    token_admin_client.mint(&contributor, &500);
+    client.contribute(&contributor, &500, &token_id, &None);
+
+    let (topics, data) = last_event(&env);
+    assert_event_snapshot(
+        &env,
+        &topics,
+        &data,
+        &[/* contribution topic + payload snapshot */],
+        &[/* contribution payload snapshot */],
+    );
+}
+
+#[test]
+fn snapshot_refund_event() {
+    let env = setup_env();
+    let (_creator, token_id, client, token_admin_client) =
+        setup_contract(&env, 10_000, 100_000, 100);
+
+    let contributor = Address::generate(&env);
+    token_admin_client.mint(&contributor, &500);
+    client.contribute(&contributor, &500, &token_id, &None);
+    client.cancel_campaign();
+    client.refund_single(&contributor);
+
+    let (topics, data) = last_event(&env);
+    assert_event_snapshot(
+        &env,
+        &topics,
+        &data,
+        &[/* refund topic + payload snapshot */],
+        &[/* refund payload snapshot */],
+    );
+}
+
+#[test]
+fn snapshot_withdrawal_event() {
+    let env = setup_env();
+    let (_creator, token_id, client, token_admin_client) = setup_contract(&env, 1_000, 500, 0);
+
+    let contributor = Address::generate(&env);
+    token_admin_client.mint(&contributor, &500);
+    client.contribute(&contributor, &500, &token_id, &None);
+
+    env.ledger().set_timestamp(2_000);
+    client.withdraw();
+
+    let (topics, data) = last_event(&env);
+    assert_event_snapshot(
+        &env,
+        &topics,
+        &data,
+        &[/* withdrawal topic + payload snapshot */],
+        &[/* withdrawal payload snapshot */],
+    );
+}
+
 // === Access-control negative tests (issue #1484) ===
 //
 // Every privileged entry point below authorises through
