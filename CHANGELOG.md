@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **#1534 Split `CampaignCard` into focused sub-components** —
+  `CampaignCardHeader`, `CampaignCardMedia`, `CampaignCardProgress`, and
+  `CampaignCardActions` are now independently testable and memoizable units
+  under `components/ui/campaign/`. `CampaignCard` remains a composition
+  wrapper with an unchanged public API. Unit tests added for each sub-component.
+
 ### Removed
 - **Deprecated `/health` endpoint** — removed the legacy `GET /health` route from
   `backend/recommendations/service.py` and `backend/fraud_detection/pipeline.py`. It was a
