@@ -181,7 +181,7 @@ fn enforce_rate_limit(
         .ok_or(ContractError::Overflow)?;
     if new_period > rl.max_amount {
         env.events().publish(
-            ("campaign", "rate_limit_hit"),
+            ("crowdfund", "rate_limit_hit"),
             EventRateLimitHit {
                 contributor: contributor.clone(),
                 attempted: amount,
@@ -421,7 +421,7 @@ fn assign_reward_tier(env: &Env, contributor: &Address, new_contrib: i128) {
 
     if let Some(tier) = best {
         env.events().publish(
-            ("campaign", "tier_assigned"),
+            ("crowdfund", "tier_assigned"),
             EventTierAssigned {
                 contributor: contributor.clone(),
                 tier_name: tier.name.clone(),
@@ -451,7 +451,7 @@ fn emit_contribution_events(
     updated_count: u32,
 ) {
     env.events().publish(
-        ("campaign", "contribution_recorded"),
+        ("crowdfund", "contribution_recorded"),
         EventContributionRecorded {
             contributor: contributor.clone(),
             amount,
@@ -461,7 +461,7 @@ fn emit_contribution_events(
     );
 
     env.events().publish(
-        ("campaign", "contributed"),
+        ("crowdfund", "contributed"),
         EventContributed {
             contributor: contributor.clone(),
             amount,
@@ -472,7 +472,7 @@ fn emit_contribution_events(
     );
 
     env.events().publish(
-        ("campaign", "qf_contribution"),
+        ("crowdfund", "qf_contribution"),
         EventQfContribution {
             contributor,
             amount,
@@ -606,7 +606,7 @@ pub(crate) fn delegate_contribution(
         TTL_PERSISTENT_ENTRY,
     );
     env.events().publish(
-        ("campaign", "delegation_created"),
+        ("crowdfund", "delegation_created"),
         EventDelegationCreated {
             delegator,
             delegate,
@@ -766,7 +766,7 @@ pub(crate) fn contribute_on_behalf(
     }
 
     env.events().publish(
-        ("campaign", "delegated_contribution"),
+        ("crowdfund", "delegated_contribution"),
         EventDelegatedContribution {
             delegator,
             delegate,
@@ -798,7 +798,7 @@ pub(crate) fn revoke_delegation(env: Env, delegator: Address) -> Result<(), Cont
         .persistent()
         .set(&DataKey::Delegation(delegator.clone()), &delegation);
     env.events().publish(
-        ("campaign", "delegation_revoked"),
+        ("crowdfund", "delegation_revoked"),
         EventDelegationRevoked { delegator },
     );
     Ok(())

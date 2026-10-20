@@ -142,14 +142,14 @@ pub(crate) fn withdraw(env: Env) -> Result<(), ContractError> {
             );
             inst.set(&DataKey::MatchingPool, &0i128);
             env.events().publish(
-                ("campaign", "matching_sponsor_refunded"),
+                ("crowdfund", "matching_sponsor_refunded"),
                 (config.sponsor, matching_pool),
             );
         }
     }
 
     env.events().publish(
-        ("campaign", "withdrawn"),
+        ("crowdfund", "withdrawn"),
         EventWithdrawn {
             creator,
             total,
@@ -269,7 +269,7 @@ pub(crate) fn claim_stream(env: Env) -> Result<(), ContractError> {
     inst.extend_ttl(TTL_INSTANCE_EXTEND_MIN, TTL_INSTANCE_EXTEND_MAX);
 
     env.events().publish(
-        ("campaign", "stream_claimed"),
+        ("crowdfund", "stream_claimed"),
         EventStreamClaimed {
             creator,
             amount: payout,
