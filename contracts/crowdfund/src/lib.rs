@@ -624,18 +624,18 @@ impl CrowdfundContract {
     /// - Publishes "deadline_extended" event with new deadline
     pub fn extend_deadline(env: Env, new_deadline: u64) -> Result<(), ContractError> {
         let inst = env.storage().instance();
-        let status: Status = inst.get(&KEY_STATUS).unwrap();
+        let status: Status = inst.get(&KEY_STATUS).unwrap_or_else(|| soroban_sdk::panic_with_error!(&env, ContractError::NotFound));
         if status != Status::Active {
             return Err(ContractError::NotActive);
         }
-        let creator: Address = inst.get(&KEY_CREATOR).unwrap();
+        let creator: Address = inst.get(&KEY_CREATOR).unwrap_or_else(|| soroban_sdk::panic_with_error!(&env, ContractError::NotFound));
         creator.require_auth();
 
-        let old_deadline: u64 = inst.get(&KEY_DEADLINE).unwrap();
+        let old_deadline: u64 = inst.get(&KEY_DEADLINE).unwrap_or_else(|| soroban_sdk::panic_with_error!(&env, ContractError::NotFound));
         validate_deadline_extension(new_deadline, old_deadline)?;
         inst.set(&KEY_DEADLINE, &new_deadline);
         env.events().publish(
-            ("campaign", "deadline_extended"),
+            ("crowdfund", "deadline_extended"),
             EventDeadlineExtended {
                 old_deadline,
                 new_deadline,
@@ -666,14 +666,14 @@ impl CrowdfundContract {
     /// # Side Effects
     /// - Updates `KEY_GOAL` in instance storage
     /// - Appends a [`GoalAdjustment`] entry to persistent `KEY_GOAL_HISTORY`
-    /// - Publishes `("campaign", "goal_adjusted")` event
+    /// - Publishes `("crowdfund", "goal_adjusted")` event
     pub fn adjust_goal(env: Env, new_goal: i128) -> Result<(), ContractError> {
         let inst = env.storage().instance();
-        let status: Status = inst.get(&KEY_STATUS).unwrap();
+        let status: Status = inst.get(&KEY_STATUS).unwrap_or_else(|| soroban_sdk::panic_with_error!(&env, ContractError::NotFound));
         if status != Status::Active {
             return Err(ContractError::NotActive);
         }
-        let creator: Address = inst.get(&KEY_CREATOR).unwrap();
+        let creator: Address = inst.get(&KEY_CREATOR).unwrap_or_else(|| soroban_sdk::panic_with_error!(&env, ContractError::NotFound));
         creator.require_auth();
 
         if new_goal <= 0 {
@@ -681,7 +681,7 @@ impl CrowdfundContract {
         }
         validate_goal_not_overflow(new_goal)?;
 
-        let previous_goal: i128 = inst.get(&KEY_GOAL).unwrap();
+        let previous_goal: i128 = inst.get(&KEY_GOAL).unwrap_or_else(|| soroban_sdk::panic_with_error!(&env, ContractError::NotFound));
         inst.set(&KEY_GOAL, &new_goal);
 
         let now = env.ledger().timestamp();
@@ -705,7 +705,7 @@ impl CrowdfundContract {
         inst.extend_ttl(TTL_INSTANCE_EXTEND_MIN, TTL_INSTANCE_EXTEND_MAX);
 
         env.events().publish(
-            ("campaign", "goal_adjusted"),
+            ("crowdfund", "goal_adjusted"),
             EventGoalAdjusted {
                 previous_goal,
                 new_goal,
@@ -737,8 +737,8 @@ impl CrowdfundContract {
     ///
     /// # Events
     /// ```ignore
-    /// ("campaign", "cancelled")      → EventCancelled { creator, total_raised }
-    /// ("campaign", "status_changed") → EventStatusChanged { old_status, new_status }
+    /// ("crowdfund", "cancelled")      → EventCancelled { creator, total_raised }
+    /// ("crowdfund", "status_changed") → EventStatusChanged { old_status, new_status }
     /// ```
     pub fn cancel_campaign(env: Env) -> Result<(), ContractError> {
         lifecycle::cancel_campaign(env)
@@ -760,7 +760,7 @@ impl CrowdfundContract {
     /// # Side Effects
     /// - Sets campaign status to `Archived`
     /// - Stores archival timestamp in instance storage
-    /// - Publishes `("campaign", "archived")` event
+    /// - Publishes `("crowdfund", "archived")` event
     pub fn archive(env: Env) -> Result<(), ContractError> {
         lifecycle::archive(env)
     }
@@ -889,7 +889,7 @@ impl CrowdfundContract {
         // from an older initiation cannot carry over.
         inst.set(&DataKey::EmergencyApprovalCount, &0u32);
         env.events().publish(
-            ("campaign", "emergency_initiated"),
+            ("crowdfund", "emergency_initiated"),
             EventEmergencyInitiated { lock_until },
         );
         Ok(())
@@ -929,9 +929,9 @@ impl CrowdfundContract {
             }
         }
 
-        let total: i128 = inst.get(&KEY_TOTAL).unwrap();
+        let total: i128 = inst.get(&KEY_TOTAL).unwrap_or_else(|| soroban_sdk::panic_with_error!(&env, ContractError::NotFound));
         if total > 0 {
-            let token_address: Address = inst.get(&KEY_TOKEN).unwrap();
+            let token_address: Address = inst.get(&KEY_TOKEN).unwrap_or_else(|| soroban_sdk::panic_with_error!(&env, ContractError::NotFound));
             token::Client::new(&env, &token_address).transfer(
                 &env.current_contract_address(),
                 &admin,
@@ -942,7 +942,7 @@ impl CrowdfundContract {
 
         inst.set(&DataKey::EmergencyLockTime, &0u64);
         env.events().publish(
-            ("campaign", "emergency_executed"),
+            ("crowdfund", "emergency_executed"),
             EventEmergencyExecuted { amount: total },
         );
         Ok(())
@@ -966,7 +966,7 @@ impl CrowdfundContract {
         auth_admin(&env)?;
         inst.set(&DataKey::EmergencyLockTime, &0u64);
         env.events()
-            .publish(("campaign", "emergency_cancelled"), ());
+            .publish(("crowdfund", "emergency_cancelled"), ());
         Ok(())
     }
 
@@ -1006,7 +1006,7 @@ impl CrowdfundContract {
             .set(&DataKey::EmergencyApproversList, &approvers);
 
         env.events().publish(
-            ("campaign", "multisig_configured"),
+            ("crowdfund", "multisig_configured"),
             EventMultiSigConfigured {
                 required_approvals,
                 approver_count,
@@ -1079,7 +1079,7 @@ impl CrowdfundContract {
         inst.set(&DataKey::EmergencyApprovalCount, &new_count);
 
         env.events().publish(
-            ("campaign", "emergency_approved"),
+            ("crowdfund", "emergency_approved"),
             EventEmergencyApproved {
                 approver,
                 approval_count: new_count,
@@ -1185,14 +1185,14 @@ impl CrowdfundContract {
         }
 
         // Require campaign to be Active before accepting sponsor escrow
-        let status: Status = inst.get(&KEY_STATUS).unwrap();
+        let status: Status = inst.get(&KEY_STATUS).unwrap_or_else(|| soroban_sdk::panic_with_error!(&env, ContractError::NotFound));
         if status != Status::Active {
             return Err(ContractError::NotActive);
         }
 
         // ── Escrow matching funds from sponsor into the contract ──────────────
         sponsor.require_auth();
-        let token_address: Address = inst.get(&KEY_TOKEN).unwrap();
+        let token_address: Address = inst.get(&KEY_TOKEN).unwrap_or_else(|| soroban_sdk::panic_with_error!(&env, ContractError::NotFound));
         token::Client::new(&env, &token_address).transfer(
             &sponsor,
             env.current_contract_address(),
@@ -1210,7 +1210,7 @@ impl CrowdfundContract {
         inst.set(&DataKey::MatchingPool, &max_match);
 
         env.events().publish(
-            ("campaign", "matching_setup"),
+            ("crowdfund", "matching_setup"),
             EventMatchingSetup {
                 sponsor,
                 match_ratio,
@@ -1266,19 +1266,19 @@ impl CrowdfundContract {
     /// * `Err(ContractError::NotActive)` if campaign is not Active
     pub fn update_category(env: Env, category: Category) -> Result<(), ContractError> {
         let inst = env.storage().instance();
-        let status: Status = inst.get(&KEY_STATUS).unwrap();
+        let status: Status = inst.get(&KEY_STATUS).unwrap_or_else(|| soroban_sdk::panic_with_error!(&env, ContractError::NotFound));
         if status != Status::Active {
             return Err(ContractError::NotActive);
         }
         validate_category(&category)?;
-        let creator: Address = inst.get(&KEY_CREATOR).unwrap();
+        let creator: Address = inst.get(&KEY_CREATOR).unwrap_or_else(|| soroban_sdk::panic_with_error!(&env, ContractError::NotFound));
         creator.require_auth();
 
         let old_category: Category = inst.get(&KEY_CATEGORY).unwrap_or(Category::Other);
         inst.set(&KEY_CATEGORY, &category);
 
         env.events().publish(
-            ("campaign", "category_updated"),
+            ("crowdfund", "category_updated"),
             EventCategoryUpdated {
                 old_category,
                 new_category: category,
@@ -1311,8 +1311,8 @@ impl CrowdfundContract {
     ///
     /// # Events
     /// ```ignore
-    /// ("campaign", "paused")         → EventPaused { timestamp }
-    /// ("campaign", "status_changed") → EventStatusChanged { old_status, new_status }
+    /// ("crowdfund", "paused")         → EventPaused { timestamp }
+    /// ("crowdfund", "status_changed") → EventStatusChanged { old_status, new_status }
     /// ```
     pub fn pause(env: Env) -> Result<(), ContractError> {
         access::pause(env)
@@ -1337,8 +1337,8 @@ impl CrowdfundContract {
     ///
     /// # Events
     /// ```ignore
-    /// ("campaign", "resumed")        → EventResumed { timestamp }
-    /// ("campaign", "status_changed") → EventStatusChanged { old_status, new_status }
+    /// ("crowdfund", "resumed")        → EventResumed { timestamp }
+    /// ("crowdfund", "status_changed") → EventStatusChanged { old_status, new_status }
     /// ```
     pub fn resume(env: Env) -> Result<(), ContractError> {
         access::resume(env)
@@ -1433,7 +1433,7 @@ impl CrowdfundContract {
         let inst = env.storage().instance();
         let creator = require_auth_creator(&env)?;
 
-        let current_deadline: u64 = inst.get(&KEY_DEADLINE).unwrap();
+        let current_deadline: u64 = inst.get(&KEY_DEADLINE).unwrap_or_else(|| soroban_sdk::panic_with_error!(&env, ContractError::NotFound));
         validate_deadline_extension(new_deadline, current_deadline)?;
 
         let now = env.ledger().timestamp();
@@ -1449,7 +1449,7 @@ impl CrowdfundContract {
 
         inst.set(&DataKey::ExtensionProposal, &proposal);
         env.events().publish(
-            ("campaign", "extension_proposed"),
+            ("crowdfund", "extension_proposed"),
             EventExtensionProposed {
                 new_deadline,
                 voting_ends_at,
@@ -1517,7 +1517,7 @@ impl CrowdfundContract {
         inst.set(&vote_key, &proposal.created_at);
 
         env.events().publish(
-            ("campaign", "extension_voted"),
+            ("crowdfund", "extension_voted"),
             EventExtensionVoted {
                 contributor,
                 approve,
@@ -1557,7 +1557,7 @@ impl CrowdfundContract {
         if total_votes > 0 && (proposal.votes_for as u64) * 2 > total_votes as u64 {
             inst.set(&KEY_DEADLINE, &proposal.new_deadline);
             env.events().publish(
-                ("campaign", "extension_executed"),
+                ("crowdfund", "extension_executed"),
                 EventExtensionExecuted {
                     new_deadline: proposal.new_deadline,
                     votes_for: proposal.votes_for,
@@ -1816,7 +1816,7 @@ impl CrowdfundContract {
         };
 
         env.storage().instance().set(&DataKey::Template, &template);
-        env.events().publish(("campaign", "template_set"), ());
+        env.events().publish(("crowdfund", "template_set"), ());
         Ok(())
     }
 
@@ -1873,7 +1873,7 @@ impl CrowdfundContract {
         let tier_count = tiers.len();
         env.storage().instance().set(&DataKey::RewardTiers, &tiers);
         env.events()
-            .publish(("campaign", "tiers_set"), EventTiersSet { tier_count });
+            .publish(("crowdfund", "tiers_set"), EventTiersSet { tier_count });
         Ok(())
     }
 
@@ -2422,11 +2422,11 @@ impl CrowdfundContract {
         contributor.require_auth();
 
         let inst = env.storage().instance();
-        let status: Status = inst.get(&KEY_STATUS).unwrap();
+        let status: Status = inst.get(&KEY_STATUS).unwrap_or_else(|| soroban_sdk::panic_with_error!(&env, ContractError::NotFound));
         if status != Status::Cancelled {
-            let deadline: u64 = inst.get(&KEY_DEADLINE).unwrap();
-            let goal: i128 = inst.get(&KEY_GOAL).unwrap();
-            let total: i128 = inst.get(&KEY_TOTAL).unwrap();
+            let deadline: u64 = inst.get(&KEY_DEADLINE).unwrap_or_else(|| soroban_sdk::panic_with_error!(&env, ContractError::NotFound));
+            let goal: i128 = inst.get(&KEY_GOAL).unwrap_or_else(|| soroban_sdk::panic_with_error!(&env, ContractError::NotFound));
+            let total: i128 = inst.get(&KEY_TOTAL).unwrap_or_else(|| soroban_sdk::panic_with_error!(&env, ContractError::NotFound));
             validate_refund_eligibility(env.ledger().timestamp(), deadline, total, goal)?;
         }
 
@@ -2441,7 +2441,7 @@ impl CrowdfundContract {
             return Err(ContractError::InsufficientFunds);
         }
 
-        let token_address: Address = inst.get(&KEY_TOKEN).unwrap();
+        let token_address: Address = inst.get(&KEY_TOKEN).unwrap_or_else(|| soroban_sdk::panic_with_error!(&env, ContractError::NotFound));
         token::Client::new(&env, &token_address).transfer(
             &env.current_contract_address(),
             &contributor,
@@ -2496,7 +2496,7 @@ impl CrowdfundContract {
         inst.set(&DataKey::TotalRewardsDistributed, &0i128);
 
         env.events().publish(
-            ("campaign", "rewards_configured"),
+            ("crowdfund", "rewards_configured"),
             EventRewardsConfigured {
                 reward_token,
                 reward_per_unit,
@@ -2569,7 +2569,7 @@ impl CrowdfundContract {
         );
 
         env.events().publish(
-            ("campaign", "rewards_distributed"),
+            ("crowdfund", "rewards_distributed"),
             EventRewardsDistributed {
                 contributor,
                 contribution_amount: contribution,
@@ -2591,11 +2591,11 @@ impl CrowdfundContract {
     /// * `Ok(())` on success
     pub fn index_campaign(env: Env) -> Result<(), ContractError> {
         let inst = env.storage().instance();
-        let title: String = inst.get(&KEY_TITLE).unwrap();
-        let description: String = inst.get(&KEY_DESC).unwrap();
-        let category: Category = inst.get(&KEY_CATEGORY).unwrap();
+        let title: String = inst.get(&KEY_TITLE).unwrap_or_else(|| soroban_sdk::panic_with_error!(&env, ContractError::NotFound));
+        let description: String = inst.get(&KEY_DESC).unwrap_or_else(|| soroban_sdk::panic_with_error!(&env, ContractError::NotFound));
+        let category: Category = inst.get(&KEY_CATEGORY).unwrap_or_else(|| soroban_sdk::panic_with_error!(&env, ContractError::NotFound));
         let visibility: Visibility = inst.get(&KEY_VISIBILITY).unwrap_or(Visibility::Public);
-        let status: Status = inst.get(&KEY_STATUS).unwrap();
+        let status: Status = inst.get(&KEY_STATUS).unwrap_or_else(|| soroban_sdk::panic_with_error!(&env, ContractError::NotFound));
 
         let index = SearchIndexEntry {
             title: title.clone(),
@@ -2611,7 +2611,7 @@ impl CrowdfundContract {
             .set(&DataKey::SearchIndex, &index);
 
         env.events().publish(
-            ("campaign", "indexed"),
+            ("crowdfund", "indexed"),
             EventCampaignIndexed {
                 title,
                 category,
@@ -3052,7 +3052,7 @@ impl CrowdfundContract {
         env.storage().persistent().set(&KEY_MILESTONES, &milestones);
 
         env.events().publish(
-            ("campaign", "milestone_verified"),
+            ("crowdfund", "milestone_verified"),
             EventMilestoneVerified {
                 milestone_index,
                 timestamp: env.ledger().timestamp(),
@@ -3084,7 +3084,7 @@ impl CrowdfundContract {
             .set(&DataKey::Contribution(contributor.clone()), &status);
 
         env.events().publish(
-            ("campaign", "verification_updated"),
+            ("crowdfund", "verification_updated"),
             EventVerificationUpdated {
                 contributor,
                 status,
@@ -3149,7 +3149,7 @@ impl CrowdfundContract {
         env.storage().persistent().set(&KEY_DISPUTE_ID, &dispute_id);
 
         env.events().publish(
-            ("campaign", "dispute_filed"),
+            ("crowdfund", "dispute_filed"),
             EventDisputeFiled {
                 dispute_id,
                 filer,
@@ -3221,7 +3221,7 @@ impl CrowdfundContract {
         env.storage().persistent().set(&KEY_DISPUTES, &disputes);
 
         env.events().publish(
-            ("campaign", "dispute_voted"),
+            ("crowdfund", "dispute_voted"),
             EventDisputeVoted {
                 dispute_id,
                 voter,
@@ -3268,7 +3268,7 @@ impl CrowdfundContract {
                 dispute_found = true;
 
                 env.events().publish(
-                    ("campaign", "dispute_resolved"),
+                    ("crowdfund", "dispute_resolved"),
                     EventDisputeResolved {
                         dispute_id,
                         status,
@@ -3771,7 +3771,7 @@ impl CrowdfundContract {
         let inst = env.storage().instance();
         let creator = require_auth_creator(&env)?;
 
-        let status: Status = inst.get(&KEY_STATUS).unwrap();
+        let status: Status = inst.get(&KEY_STATUS).unwrap_or_else(|| soroban_sdk::panic_with_error!(&env, ContractError::NotFound));
         if status != Status::Active {
             return Err(ContractError::NotActive);
         }
@@ -3993,17 +3993,17 @@ impl CrowdfundContract {
     /// Must be called while the campaign is `Active`.
     pub fn set_caps(env: Env, soft_cap: i128, stretch_goal: i128) -> Result<(), ContractError> {
         let inst = env.storage().instance();
-        let status: Status = inst.get(&KEY_STATUS).unwrap();
+        let status: Status = inst.get(&KEY_STATUS).unwrap_or_else(|| soroban_sdk::panic_with_error!(&env, ContractError::NotFound));
         if status != Status::Active {
             return Err(ContractError::NotActive);
         }
-        let creator: Address = inst.get(&KEY_CREATOR).unwrap();
+        let creator: Address = inst.get(&KEY_CREATOR).unwrap_or_else(|| soroban_sdk::panic_with_error!(&env, ContractError::NotFound));
         creator.require_auth();
 
         if soft_cap < 0 || stretch_goal < 0 {
             return Err(ContractError::InvalidGoal);
         }
-        let goal: i128 = inst.get(&KEY_GOAL).unwrap();
+        let goal: i128 = inst.get(&KEY_GOAL).unwrap_or_else(|| soroban_sdk::panic_with_error!(&env, ContractError::NotFound));
         // soft_cap must not exceed the hard goal; stretch_goal must be >= goal
         if soft_cap > 0 && soft_cap > goal {
             return Err(ContractError::InvalidGoal);
@@ -4016,7 +4016,7 @@ impl CrowdfundContract {
         inst.set(&KEY_STRETCH_GOAL, &stretch_goal);
 
         env.events().publish(
-            ("campaign", "caps_configured"),
+            ("crowdfund", "caps_configured"),
             EventCapsConfigured {
                 soft_cap,
                 stretch_goal,
@@ -4156,6 +4156,29 @@ mod panic_safety_tests {
             &None,
         );
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_no_panic_on_uninitialized_admin_paths() {
+        let env = Env::default();
+        let client = setup_client(&env);
+        let addr = Address::generate(&env);
+
+        // Admin/creator-only entry points on an uninitialized contract must
+        // return a typed error instead of panicking on a missing storage key.
+        assert!(client.try_pause().is_err());
+        assert!(client.try_resume().is_err());
+        assert!(client.try_execute_emergency_withdrawal().is_err());
+        assert!(client.try_cancel_emergency_withdrawal().is_err());
+        assert!(client.try_set_caps(&0, &0).is_err());
+        assert!(client.try_update_category(&Category::Other).is_err());
+        assert!(client.try_propose_extension(&1_000_000).is_err());
+        assert!(client
+            .try_setup_matching(&addr, &10_000, &1_000)
+            .is_err());
+        assert!(client
+            .try_configure_yield(&addr, &1_000, &500)
+            .is_err());
     }
 
     #[test]
