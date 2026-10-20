@@ -46,6 +46,7 @@
 //! The individual single-field getters are unchanged — they remain cheap and
 //! callers that need only one field should continue using them directly.
 
+use crate::errors::ContractError;
 use soroban_sdk::{Address, Env, String, Vec};
 
 use crate::{
@@ -110,11 +111,11 @@ impl CachedInstanceView {
     pub(crate) fn load(env: &Env) -> Self {
         let inst = env.storage().instance();
 
-        let creator: Address = inst.get(&KEY_CREATOR).unwrap();
-        let token: Address = inst.get(&KEY_TOKEN).unwrap();
-        let goal: i128 = inst.get(&KEY_GOAL).unwrap();
-        let deadline: u64 = inst.get(&KEY_DEADLINE).unwrap();
-        let min_contribution: i128 = inst.get(&KEY_MIN).unwrap();
+        let creator: Address = inst.get(&KEY_CREATOR).unwrap_or_else(|| soroban_sdk::panic_with_error!(&env, ContractError::NotFound));
+        let token: Address = inst.get(&KEY_TOKEN).unwrap_or_else(|| soroban_sdk::panic_with_error!(&env, ContractError::NotFound));
+        let goal: i128 = inst.get(&KEY_GOAL).unwrap_or_else(|| soroban_sdk::panic_with_error!(&env, ContractError::NotFound));
+        let deadline: u64 = inst.get(&KEY_DEADLINE).unwrap_or_else(|| soroban_sdk::panic_with_error!(&env, ContractError::NotFound));
+        let min_contribution: i128 = inst.get(&KEY_MIN).unwrap_or_else(|| soroban_sdk::panic_with_error!(&env, ContractError::NotFound));
         let max_contribution: i128 = inst.get(&KEY_MAX).unwrap_or(0);
         let title: String = inst
             .get(&KEY_TITLE)
@@ -122,7 +123,7 @@ impl CachedInstanceView {
         let description: String = inst
             .get(&KEY_DESC)
             .unwrap_or_else(|| String::from_str(env, ""));
-        let status: Status = inst.get(&KEY_STATUS).unwrap();
+        let status: Status = inst.get(&KEY_STATUS).unwrap_or_else(|| soroban_sdk::panic_with_error!(&env, ContractError::NotFound));
         let category: Category = inst.get(&KEY_CATEGORY).unwrap_or(Category::Other);
         let total: i128 = inst.get(&KEY_TOTAL).unwrap_or(0);
         let platform_config: Option<PlatformConfig> = inst.get(&KEY_PLATFORM);
@@ -149,6 +150,7 @@ impl CachedInstanceView {
     ///
     /// Returns `0` when no platform config is set.
     /// This is a pure in-memory computation — no additional storage reads.
+    #[cfg(test)]
     #[inline]
     pub(crate) fn platform_fee_for(&self, amount: i128) -> i128 {
         self.platform_config
@@ -160,6 +162,7 @@ impl CachedInstanceView {
     /// Return the current fee mode.
     ///
     /// Pure in-memory — no storage reads.
+    #[cfg(test)]
     #[inline]
     pub(crate) fn fee_mode(&self) -> FeeMode {
         self.platform_config
@@ -175,6 +178,7 @@ impl CachedInstanceView {
     ///
     /// # Arguments
     /// * `now` — current ledger timestamp (obtained once by the caller).
+    #[cfg(test)]
     #[inline]
     pub(crate) fn vested_amount(&self, now: u64) -> i128 {
         if self.total <= 0 {
@@ -208,22 +212,22 @@ pub(crate) fn total_raised(env: Env) -> i128 {
 
 /// Returns the campaign creator's Stellar address.
 pub(crate) fn creator(env: Env) -> Address {
-    env.storage().instance().get(&KEY_CREATOR).unwrap()
+    env.storage().instance().get(&KEY_CREATOR).unwrap_or_else(|| soroban_sdk::panic_with_error!(&env, ContractError::NotFound))
 }
 
 /// Returns the current campaign status.
 pub(crate) fn status(env: Env) -> Status {
-    env.storage().instance().get(&KEY_STATUS).unwrap()
+    env.storage().instance().get(&KEY_STATUS).unwrap_or_else(|| soroban_sdk::panic_with_error!(&env, ContractError::NotFound))
 }
 
 /// Returns the campaign funding goal in stroops.
 pub(crate) fn goal(env: Env) -> i128 {
-    env.storage().instance().get(&KEY_GOAL).unwrap()
+    env.storage().instance().get(&KEY_GOAL).unwrap_or_else(|| soroban_sdk::panic_with_error!(&env, ContractError::NotFound))
 }
 
 /// Returns the campaign deadline as a Unix timestamp (seconds).
 pub(crate) fn deadline(env: Env) -> u64 {
-    env.storage().instance().get(&KEY_DEADLINE).unwrap()
+    env.storage().instance().get(&KEY_DEADLINE).unwrap_or_else(|| soroban_sdk::panic_with_error!(&env, ContractError::NotFound))
 }
 
 /// Returns the total contribution amount for a specific contributor in stroops.
@@ -245,7 +249,7 @@ pub(crate) fn is_contributor(env: Env, address: Address) -> bool {
 
 /// Returns the minimum contribution amount in stroops.
 pub(crate) fn min_contribution(env: Env) -> i128 {
-    env.storage().instance().get(&KEY_MIN).unwrap()
+    env.storage().instance().get(&KEY_MIN).unwrap_or_else(|| soroban_sdk::panic_with_error!(&env, ContractError::NotFound))
 }
 
 /// Returns the maximum contribution amount per contributor in stroops (0 = no limit).
