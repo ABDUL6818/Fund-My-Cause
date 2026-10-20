@@ -19,6 +19,34 @@ use crate::{
     CrowdfundContract,
 };
 
+/// Maximum byte length of a campaign title.
+pub const MAX_TITLE_LEN: u32 = 64;
+/// Maximum byte length of a campaign description.
+pub const MAX_DESCRIPTION_LEN: u32 = 512;
+/// Maximum number of social links attached to a campaign.
+pub const MAX_SOCIAL_LINKS: u32 = 10;
+/// Maximum byte length of a single social link entry.
+pub const MAX_SOCIAL_LINK_LEN: u32 = 128;
+/// Exact byte length of an IPFS CIDv0 ("Qm…", base58).
+pub const IPFS_CID_V0_LEN: u32 = 46;
+/// Minimum byte length of an IPFS CIDv1 ("bafy…", base32).
+pub const IPFS_CID_V1_MIN_LEN: u32 = 59;
+/// Maximum byte length of an IPFS CID (CIDv1 upper bound).
+pub const IPFS_CID_MAX_LEN: u32 = 128;
+
+/// Validates a social-links vector against the count and per-entry length limits.
+fn validate_social_links(links: &Vec<String>) -> Result<(), ContractError> {
+    if links.len() > MAX_SOCIAL_LINKS {
+        return Err(ContractError::InvalidInput);
+    }
+    for link in links.iter() {
+        if link.len() > MAX_SOCIAL_LINK_LEN {
+            return Err(ContractError::InvalidInput);
+        }
+    }
+    Ok(())
+}
+
 /// Updates campaign metadata (title, description, social links).
 pub(crate) fn update_metadata(
     env: Env,
@@ -46,19 +74,23 @@ pub(crate) fn update_metadata(
     let meta_hist_key = metadata_field_key(MetadataField::History);
 
     let effective_title: String = if let Some(ref t) = title {
-        validate_string_length(t, 64)?;
+        validate_string_length(t, MAX_TITLE_LEN)?;
         t.clone()
     } else {
         inst.get(&title_key)
             .unwrap_or_else(|| String::from_str(&env, ""))
     };
     let effective_desc: String = if let Some(ref d) = description {
-        validate_string_length(d, 512)?;
+        validate_string_length(d, MAX_DESCRIPTION_LEN)?;
         d.clone()
     } else {
         inst.get(&desc_key)
             .unwrap_or_else(|| String::from_str(&env, ""))
     };
+
+    if let Some(ref l) = social_links {
+        validate_social_links(l)?;
+    }
 
     if let Some(t) = title {
         inst.set(&title_key, &t);
@@ -130,8 +162,8 @@ pub(crate) fn update_ipfs_cid(env: Env, cid: String) -> Result<(), ContractError
     // does not expose content access without an exact-length copy buffer, so we
     // validate the well-known CID lengths instead.
     let len = cid.len();
-    let is_v0 = len == 46;
-    let is_v1 = len >= 59;
+    let is_v0 = len == IPFS_CID_V0_LEN;
+    let is_v1 = len >= IPFS_CID_V1_MIN_LEN && len <= IPFS_CID_MAX_LEN;
     if !is_v0 && !is_v1 {
         return Err(ContractError::InvalidInput);
     }

@@ -4159,6 +4159,29 @@ mod panic_safety_tests {
     }
 
     #[test]
+    fn test_no_panic_on_uninitialized_admin_paths() {
+        let env = Env::default();
+        let client = setup_client(&env);
+        let addr = Address::generate(&env);
+
+        // Admin/creator-only entry points on an uninitialized contract must
+        // return a typed error instead of panicking on a missing storage key.
+        assert!(client.try_pause().is_err());
+        assert!(client.try_resume().is_err());
+        assert!(client.try_execute_emergency_withdrawal().is_err());
+        assert!(client.try_cancel_emergency_withdrawal().is_err());
+        assert!(client.try_set_caps(&0, &0).is_err());
+        assert!(client.try_update_category(&Category::Other).is_err());
+        assert!(client.try_propose_extension(&1_000_000).is_err());
+        assert!(client
+            .try_setup_matching(&addr, &10_000, &1_000)
+            .is_err());
+        assert!(client
+            .try_configure_yield(&addr, &1_000, &500)
+            .is_err());
+    }
+
+    #[test]
     fn test_no_panic_on_past_deadline() {
         let env = Env::default();
         let client = setup_client(&env);
