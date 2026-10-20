@@ -30,7 +30,7 @@ pub(crate) fn get_stats(env: Env) -> CampaignStats {
     let largest_contribution: i128 = inst.get(&DataKey::LargestContribution).unwrap_or(0);
     let total_raised: i128 = inst.get(&KEY_TOTAL).unwrap_or(0);
     let gross_raised: i128 = inst.get(&KEY_GROSS_TOTAL).unwrap_or(total_raised);
-    let goal: i128 = inst.get(&KEY_GOAL).unwrap();
+    let goal: i128 = inst.get(&KEY_GOAL).unwrap_or_else(|| soroban_sdk::panic_with_error!(&env, ContractError::NotFound));
     let soft_cap: i128 = inst.get(&KEY_SOFT_CAP).unwrap_or(0);
     let stretch_goal: i128 = inst.get(&KEY_STRETCH_GOAL).unwrap_or(0);
 
@@ -105,7 +105,7 @@ pub(crate) fn get_qf_inputs(env: Env) -> QfInputs {
 pub(crate) fn get_performance_metrics(env: Env) -> PerformanceMetrics {
     let inst = env.storage().instance();
     let total_raised: i128 = inst.get(&KEY_TOTAL).unwrap_or(0);
-    let goal: i128 = inst.get(&KEY_GOAL).unwrap();
+    let goal: i128 = inst.get(&KEY_GOAL).unwrap_or_else(|| soroban_sdk::panic_with_error!(&env, ContractError::NotFound));
     let start_time: u64 = inst
         .get(&KEY_START_TIME)
         .unwrap_or(env.ledger().timestamp());

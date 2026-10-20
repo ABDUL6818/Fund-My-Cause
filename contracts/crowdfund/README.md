@@ -65,3 +65,9 @@ under `corpus/fuzz_validation/`, fix the underlying bug, and note it here.
 Fuzzing is intentionally **not** run on every PR (it's non-deterministic and open-ended). A
 scheduled, non-blocking job runs it periodically instead — see
 `.github/workflows/fuzz.yml` — and reports findings without failing other CI checks.
+
+## WASM size budget
+
+Each release WASM must stay under the budget in `contracts/crowdfund/WASM_BUDGET_BYTES`
+(currently 512000 bytes). Run `make contracts-size` (or `make size`) after a release build. It
+fails when any contract is over the budget. CI runs the same check with the same file.
