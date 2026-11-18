@@ -9,20 +9,11 @@
 
 import React from "react";
 import { cn } from "./lib/utils";
-
-// ── Base block ────────────────────────────────────────────────────────────────
-
-function Block({ className }: { className: string }) {
-  return <div className={cn("skeleton-shimmer rounded", className)} />;
-}
-
-// ── Row helpers ───────────────────────────────────────────────────────────────
-
-function Row({ children, className }: { children: React.ReactNode; className?: string }) {
-  return <div className={cn("flex items-center gap-3", className)}>{children}</div>;
-}
+import { SkeletonBlock as Block, SkeletonRow as Row } from "./SkeletonPrimitives";
 
 // ── Main export ───────────────────────────────────────────────────────────────
+
+export { SkeletonBlock, SkeletonRow } from "./SkeletonPrimitives";
 
 export interface CampaignDetailSkeletonProps {
   /** Additional class applied to the outermost wrapper. */

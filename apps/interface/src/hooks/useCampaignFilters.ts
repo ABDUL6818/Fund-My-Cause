@@ -1,10 +1,15 @@
 import { useRouter, useSearchParams } from "next/navigation";
 import React from "react";
+import { normalizeDateInput } from "@/lib/date";
 
 function toFiniteNumber(value: string | null): number | null {
   if (!value) return null;
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : null;
+}
+
+function toDateParam(value: string | null): string {
+  return normalizeDateInput(value) ?? "";
 }
 
 export type FilterTab = "all" | "active" | "funded" | "ended";
@@ -61,9 +66,11 @@ export function useCampaignFilters(): UseCampaignFiltersReturn {
     searchParams.get("goalMax") ?? "",
   );
   const [dateFrom, setDateFrom] = React.useState(
-    searchParams.get("dateFrom") ?? "",
+    toDateParam(searchParams.get("dateFrom")),
   );
-  const [dateTo, setDateTo] = React.useState(searchParams.get("dateTo") ?? "");
+  const [dateTo, setDateTo] = React.useState(
+    toDateParam(searchParams.get("dateTo")),
+  );
 
   const setParam = React.useCallback(
     (key: string, value: string) => {
@@ -89,9 +96,11 @@ export function useCampaignFilters(): UseCampaignFiltersReturn {
     else params.delete("goalMin");
     if (goalMax) params.set("goalMax", goalMax);
     else params.delete("goalMax");
-    if (dateFrom) params.set("dateFrom", dateFrom);
+    const normalizedFrom = normalizeDateInput(dateFrom);
+    if (normalizedFrom) params.set("dateFrom", normalizedFrom);
     else params.delete("dateFrom");
-    if (dateTo) params.set("dateTo", dateTo);
+    const normalizedTo = normalizeDateInput(dateTo);
+    if (normalizedTo) params.set("dateTo", normalizedTo);
     else params.delete("dateTo");
     params.delete("page");
     router.replace(`/campaigns?${params.toString()}`, { scroll: false });
@@ -122,8 +131,8 @@ export function useCampaignFilters(): UseCampaignFiltersReturn {
 
   const activeGoalMin = toFiniteNumber(searchParams.get("goalMin"));
   const activeGoalMax = toFiniteNumber(searchParams.get("goalMax"));
-  const activeDateFrom = searchParams.get("dateFrom") ?? null;
-  const activeDateTo = searchParams.get("dateTo") ?? null;
+  const activeDateFrom = normalizeDateInput(searchParams.get("dateFrom"));
+  const activeDateTo = normalizeDateInput(searchParams.get("dateTo"));
   const hasAdvanced = !!(
     activeGoalMin ||
     activeGoalMax ||
