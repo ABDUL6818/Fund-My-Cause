@@ -8,6 +8,7 @@
  * exactly one place.
  */
 
+import { formatAmount as formatXlmAmount } from "./formatAmount";
 import { calculateProgress, clampProgress, isProgressFunded } from "./progress";
 
 export interface CampaignCardData {
@@ -52,7 +53,7 @@ export interface FormattedCampaignCard {
 }
 
 function defaultFormatAmount(amount: number): string {
-  return amount.toLocaleString(undefined, { maximumFractionDigits: 2 });
+  return formatXlmAmount(amount, { unit: "XLM" });
 }
 
 /**

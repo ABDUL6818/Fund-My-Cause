@@ -22,12 +22,91 @@ function isRTLLocale(locale: string): boolean {
   return RTL_LOCALES.includes(locale);
 }
 
+// ── Amount Formatting ─────────────────────────────────────────────────────
+
+export type FormatAmountUnit = "XLM" | "stroops" | "fiat";
+
+export interface FormatAmountOptions {
+  /** ISO 4217 currency code used when `unit` is "fiat". Defaults to "USD". */
+  currency?: string;
+  /** App locale key (e.g. "en", "ar"). Defaults to "en". */
+  locale?: string;
+  /**
+   * How to interpret `amount`:
+   * - "XLM" (default): amount is in XLM, rendered with 2 decimals + "XLM" suffix.
+   * - "stroops": amount is in stroops, converted to XLM before formatting.
+   * - "fiat": amount is a fiat value, rendered with Intl currency style.
+   */
+  unit?: FormatAmountUnit;
+  /** Override the maximum fraction digits (defaults: 2 for XLM/fiat, 0 for JPY). */
+  maximumFractionDigits?: number;
+}
+
+const ZERO_DECIMAL_CURRENCIES = new Set(["JPY", "KRW", "VND", "CLP", "ISK"]);
+
+function isValidCurrencyCode(currency: string): boolean {
+  try {
+    // Throws RangeError for structurally invalid codes.
+    new Intl.NumberFormat("en-US", { style: "currency", currency });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Centralized, locale-aware amount formatter.
+ *
+ * @example
+ * formatAmount(1234.5) // "1,234.50 XLM"
+ * formatAmount(12_345_000n, { unit: "stroops" }) // "1.23 XLM"
+ * formatAmount(1234.5, { unit: "fiat" }) // "$1,234.50"
+ * formatAmount(1234, { unit: "fiat", currency: "JPY" }) // "¥1,234"
+ */
+export function formatAmount(
+  amount: number | bigint,
+  options: FormatAmountOptions = {},
+): string {
+  const {
+    currency = "USD",
+    locale = "en",
+    unit = "XLM",
+    maximumFractionDigits,
+  } = options;
+
+  const intlCode = localeToIntlCode(locale);
+
+  if (unit === "fiat") {
+    const code = currency.toUpperCase();
+    const resolvedCurrency = isValidCurrencyCode(code) ? code : "USD";
+    const digits =
+      maximumFractionDigits ??
+      (ZERO_DECIMAL_CURRENCIES.has(resolvedCurrency) ? 0 : 2);
+    return new Intl.NumberFormat(intlCode, {
+      style: "currency",
+      currency: resolvedCurrency,
+      minimumFractionDigits: digits,
+      maximumFractionDigits: digits,
+    }).format(Number(amount));
+  }
+
+  const xlm =
+    unit === "stroops"
+      ? Number(amount) / Number(STROOPS_PER_XLM)
+      : Number(amount);
+  const digits = maximumFractionDigits ?? 2;
+  const formatted = new Intl.NumberFormat(intlCode, {
+    minimumFractionDigits: digits,
+    maximumFractionDigits: digits,
+  }).format(xlm);
+  return `${formatted} XLM`;
+}
+
 // ── XLM Formatting ────────────────────────────────────────────────────────
 
 /** "1,234.56 XLM" — uses locale-aware number formatting */
 export function formatXLM(stroops: bigint, locale: string = "en"): string {
-  const xlm = Number(stroops) / Number(STROOPS_PER_XLM);
-  return `${xlm.toLocaleString(localeToIntlCode(locale), { minimumFractionDigits: 2, maximumFractionDigits: 2 })} XLM`;
+  return formatAmount(stroops, { unit: "stroops", locale });
 }
 
 /** Locale-aware XLM amount formatter — returns a plain number string */
@@ -35,23 +114,17 @@ export function formatXLMAmount(
   stroops: bigint,
   locale: string = "en",
 ): string {
-  const xlm = Number(stroops) / Number(STROOPS_PER_XLM);
-  return xlm.toLocaleString(localeToIntlCode(locale), {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
+  return formatAmount(stroops, { unit: "stroops", locale }).replace(
+    / XLM$/,
+    "",
+  );
 }
 
 // ── Currency Formatting ──────────────────────────────────────────────────
 
 /** "$1,234.56" — uses locale-aware currency formatting */
 export function formatUSD(amount: number, locale: string = "en"): string {
-  return amount.toLocaleString(localeToIntlCode(locale), {
-    style: "currency",
-    currency: "USD",
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
+  return formatAmount(amount, { unit: "fiat", currency: "USD", locale });
 }
 
 /** Format currency with locale and RTL support */
@@ -60,15 +133,9 @@ export function formatCurrency(
   currency: string = "USD",
   locale: string = "en",
 ): string {
-  const intlCode = localeToIntlCode(locale);
   const isRTL = isRTLLocale(locale);
 
-  const formatted = new Intl.NumberFormat(intlCode, {
-    style: "currency",
-    currency,
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(amount);
+  const formatted = formatAmount(amount, { unit: "fiat", currency, locale });
 
   // For RTL locales, ensure proper directional formatting
   if (isRTL) {
@@ -106,9 +173,12 @@ export function getCurrencySymbol(
   locale: string = "en",
 ): string {
   const intlCode = localeToIntlCode(locale);
+  const code = isValidCurrencyCode(currency.toUpperCase())
+    ? currency.toUpperCase()
+    : "USD";
   const parts = new Intl.NumberFormat(intlCode, {
     style: "currency",
-    currency,
+    currency: code,
   }).formatToParts(0);
 
   const symbol = parts.find((part) => part.type === "currency")?.value || "";

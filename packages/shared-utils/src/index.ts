@@ -9,3 +9,5 @@ export * from "./errors";
 export * from "./retry";
 export * from "./circuit-breaker";
 export * from "./logger";
+
+export { formatAmount } from "./formatting";

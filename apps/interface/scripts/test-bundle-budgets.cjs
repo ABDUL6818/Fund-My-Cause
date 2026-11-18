@@ -97,6 +97,90 @@ describe("Bundle Budget Checker", () => {
       expect(budget.label.length).toBeLessThan(100);
     }
   });
+
+  test("campaign create route has a budget entry", () => {
+    const budgets = JSON.parse(fs.readFileSync(BUDGET_FILE, "utf-8")).budgets;
+    const campaignCreate = budgets.find(b => b.route === "/campaigns/create");
+    expect(campaignCreate).toBeDefined();
+    expect(campaignCreate.label.length).toBeGreaterThan(0);
+    expect(campaignCreate.maxJavascriptKB).toBeGreaterThan(0);
+    expect(campaignCreate.maxCssKB).toBeGreaterThan(0);
+  });
+
+  test("dashboard route has a budget entry", () => {
+    const budgets = JSON.parse(fs.readFileSync(BUDGET_FILE, "utf-8")).budgets;
+    const dashboard = budgets.find(b => b.route === "/dashboard");
+    expect(dashboard).toBeDefined();
+    expect(dashboard.label.length).toBeGreaterThan(0);
+    expect(dashboard.maxJavascriptKB).toBeGreaterThan(0);
+    expect(dashboard.maxCssKB).toBeGreaterThan(0);
+  });
+});
+
+describe("Per-route reporting", () => {
+  const formatKB = (bytes) => (bytes / 1024).toFixed(1);
+
+  const buildReport = (budgets, sizes) =>
+    budgets.map((budget) => {
+      const size = sizes[budget.route] || { js: 0, css: 0 };
+      const jsKB = size.js / 1024;
+      const cssKB = size.css / 1024;
+      return {
+        route: budget.route,
+        label: budget.label,
+        jsKB,
+        cssKB,
+        jsOk: jsKB <= budget.maxJavascriptKB,
+        cssOk: cssKB <= budget.maxCssKB,
+        passed: jsKB <= budget.maxJavascriptKB && cssKB <= budget.maxCssKB,
+      };
+    });
+
+  test("reports campaign create route status", () => {
+    const budgets = [
+      { route: "/campaigns/create", label: "Campaign create", maxJavascriptKB: 200, maxCssKB: 50 },
+    ];
+    const sizes = { "/campaigns/create": { js: 150 * 1024, css: 20 * 1024 } };
+    const report = buildReport(budgets, sizes);
+    expect(report).toHaveLength(1);
+    expect(report[0].route).toBe("/campaigns/create");
+    expect(report[0].jsKB).toBe(150);
+    expect(report[0].cssKB).toBe(20);
+    expect(report[0].passed).toBe(true);
+  });
+
+  test("reports dashboard route status", () => {
+    const budgets = [
+      { route: "/dashboard", label: "Dashboard", maxJavascriptKB: 200, maxCssKB: 50 },
+    ];
+    const sizes = { "/dashboard": { js: 250 * 1024, css: 20 * 1024 } };
+    const report = buildReport(budgets, sizes);
+    expect(report).toHaveLength(1);
+    expect(report[0].route).toBe("/dashboard");
+    expect(report[0].jsOk).toBe(false);
+    expect(report[0].cssOk).toBe(true);
+    expect(report[0].passed).toBe(false);
+  });
+
+  test("reports each route individually", () => {
+    const budgets = [
+      { route: "/campaigns/create", label: "Campaign create", maxJavascriptKB: 200, maxCssKB: 50 },
+      { route: "/dashboard", label: "Dashboard", maxJavascriptKB: 200, maxCssKB: 50 },
+    ];
+    const sizes = {
+      "/campaigns/create": { js: 100 * 1024, css: 10 * 1024 },
+      "/dashboard": { js: 300 * 1024, css: 10 * 1024 },
+    };
+    const report = buildReport(budgets, sizes);
+    expect(report).toHaveLength(2);
+    expect(report[0].passed).toBe(true);
+    expect(report[1].passed).toBe(false);
+  });
+
+  test("formats per-route sizes in KB", () => {
+    expect(formatKB(150 * 1024)).toBe("150.0");
+    expect(formatKB(20 * 1024)).toBe("20.0");
+  });
 });
 
 describe("formatKB utility", () => {

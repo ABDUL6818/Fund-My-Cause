@@ -47,7 +47,7 @@ const VARIANT_CLASSES: Record<CardVariant, string> = {
  * The legacy `padding` prop is still accepted for backwards compatibility but
  * `variant` is the preferred API going forward.
  */
-export function Card({
+function CardComponent({
   children,
   variant = "default",
   hoverable = false,
@@ -85,7 +85,7 @@ export function Card({
 /**
  * Card header component
  */
-export function CardHeader({
+function CardHeaderComponent({
   children,
   className,
   ...props
@@ -103,7 +103,7 @@ export function CardHeader({
 /**
  * Card body component
  */
-export function CardBody({
+function CardBodyComponent({
   children,
   className,
   ...props
@@ -118,7 +118,7 @@ export function CardBody({
 /**
  * Card footer component
  */
-export function CardFooter({
+function CardFooterComponent({
   children,
   className,
   ...props
@@ -132,6 +132,33 @@ export function CardFooter({
     </div>
   );
 }
+
+/**
+ * Memoized Card component. Prevents re-renders of campaign list items when
+ * parent state changes but props remain referentially equal.
+ */
+export const Card = React.memo(CardComponent) as React.MemoExoticComponent<
+  typeof CardComponent
+> & {
+  Header: typeof CardHeader;
+  Body: typeof CardBody;
+  Footer: typeof CardFooter;
+};
+
+/**
+ * Memoized Card header component.
+ */
+export const CardHeader = React.memo(CardHeaderComponent);
+
+/**
+ * Memoized Card body component.
+ */
+export const CardBody = React.memo(CardBodyComponent);
+
+/**
+ * Memoized Card footer component.
+ */
+export const CardFooter = React.memo(CardFooterComponent);
 
 Card.Header = CardHeader;
 Card.Body = CardBody;
