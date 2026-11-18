@@ -39,3 +39,4 @@ You do **not** need an ADR for routine implementation choices (which library to 
 | [ADR-008](./ADR-008-fraud-detection-scoring-pipeline-design.md) | Fraud-detection scoring pipeline design | Accepted |
 | [ADR-009](./ADR-009-crowdfund-storage-layout-and-upgrade.md) | Crowdfund storage layout and upgrade strategy | Proposed |
 | [ADR-010](./ADR-010-contract-event-naming-convention.md) | Contract event naming and topic convention | Proposed |
+| [ADR-011](./ADR-011-contract-architecture-and-storage-layout.md) | Contract architecture and storage layout (crowdfund / registry / qf / achievements) | Proposed |

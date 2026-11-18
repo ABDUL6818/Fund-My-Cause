@@ -156,6 +156,10 @@ git commit --no-verify
 
 Use **[docs/SETUP.md](./docs/SETUP.md)**. It covers npm workspaces, the pinned Rust toolchain, Docker Compose, per-service environment files, contract builds, and testnet seeding. Do not use other copies of these steps.
 
+## Interface Architecture Decisions
+
+Before changing state management or data fetching in `apps/interface`, read the recorded patterns and rationale in the [interface state management and data fetching ADR](./docs/adr/interface-state-management-and-data-fetching.md). It documents the chosen approach (server components for initial data, a small client-side store for UI state, and a single data-fetching layer) and the trade-offs behind it. Follow the ADR when adding new state or fetch logic, and update it in the same PR if you intentionally deviate.
+
 ## Project Structure
 
 ```

@@ -83,3 +83,11 @@ Wallet connect/disconnect/signing lives in the shared
 [`@fund-my-cause/sdk/wallet`](../../sdks/js/README.md#wallet-connect) module,
 not in this app. `src/lib/walletAdapters.ts` only supplies app-level
 configuration (the WalletConnect project ID) and re-exports the SDK adapters.
+
+## State management and data fetching
+
+Client state lives in Zustand slices created through the shared `createSlice`
+factory in `src/store`; server data is fetched through the typed GraphQL client
+and the hooks in `src/hooks`. The rationale, alternatives considered, and
+testing evidence are recorded in
+[ADR-012: Interface state management and data fetching](docs/adr/ADR-012-interface-state-management-and-data-fetching.md).
