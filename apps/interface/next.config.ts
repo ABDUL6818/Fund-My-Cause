@@ -1,10 +1,11 @@
 import type { NextConfig } from "next";
 import createNextIntlPlugin from "next-intl/plugin";
+import { env } from "./src/env";
 
 const isDev = process.env.NODE_ENV === "development";
 
 // CDN origin for image delivery (optional — leave unset to serve from origin)
-const IMAGE_CDN_URL = process.env.NEXT_PUBLIC_IMAGE_CDN_URL ?? "";
+const IMAGE_CDN_URL = env.NEXT_PUBLIC_IMAGE_CDN_URL ?? "";
 
 /**
  * Content Security Policy for standard app routes.

@@ -9,11 +9,13 @@
  */
 
 import React, { ReactNode } from "react";
+import { useToast } from "@/components/ToastProvider";
 
 interface ErrorBoundaryProps {
   children: ReactNode;
   fallback?: (error: Error, reset: () => void) => ReactNode;
   onError?: (error: Error, info: { componentStack: string }) => void;
+  onToast?: (error: Error) => void;
 }
 
 interface ErrorBoundaryState {
@@ -21,7 +23,7 @@ interface ErrorBoundaryState {
   error: Error | null;
 }
 
-export class ErrorBoundary extends React.Component<
+class ErrorBoundaryBase extends React.Component<
   ErrorBoundaryProps,
   ErrorBoundaryState
 > {
@@ -38,7 +40,8 @@ export class ErrorBoundary extends React.Component<
     if (this.props.onError) {
       this.props.onError(error, errorInfo);
     }
-    console.error("Error boundary caught:", error, errorInfo);
+    // Surface the error through the centralized toast API instead of an inline alert.
+    this.props.onToast?.(error);
   }
 
   reset = () => {
@@ -56,6 +59,26 @@ export class ErrorBoundary extends React.Component<
 
     return this.props.children;
   }
+}
+
+/**
+ * ErrorBoundary wired to the centralized toast API (Issue #1674).
+ * Caught errors are surfaced via useToast; fallback UI and onError are preserved.
+ */
+export function ErrorBoundary(props: Omit<ErrorBoundaryProps, "onToast">) {
+  const { showToast } = useToast();
+
+  const handleToast = React.useCallback(
+    (error: Error) => {
+      showToast({
+        variant: "error",
+        message: error.message || "An unexpected error occurred",
+      });
+    },
+    [showToast],
+  );
+
+  return <ErrorBoundaryBase {...props} onToast={handleToast} />;
 }
 
 /**

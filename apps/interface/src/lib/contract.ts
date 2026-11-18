@@ -24,6 +24,7 @@ import {
 import { isValidContractId } from "@/lib/validation";
 import type { SignFn } from "@/types/contract";
 import { ContractError } from "@/types/contract";
+import { mapContractErrorCode } from "@/lib/contract-errors";
 import {
   cacheGet,
   cacheSet,
@@ -97,7 +98,7 @@ async function simulateView(
       throw err;
     });
   if (SorobanRpc.Api.isSimulationError(result)) {
-    throw new ContractError(result.error);
+    throw new ContractError(result.error, mapContractErrorCode(result.error));
   }
   const sim = result as SorobanRpc.Api.SimulateTransactionSuccessResponse;
   const value = scValToNative(sim.result!.retval);
@@ -149,8 +150,10 @@ async function invokeContract(
 
   const sendResult = await rpc.sendTransaction(signedTx);
   if (sendResult.status === "ERROR") {
+    const detail = JSON.stringify(sendResult.errorResult);
     throw new ContractError(
-      `Submit failed: ${JSON.stringify(sendResult.errorResult)}`,
+      `Submit failed: ${detail}`,
+      mapContractErrorCode(detail),
     );
   }
 
@@ -165,11 +168,17 @@ async function invokeContract(
       return hash;
     }
     if (status.status === SorobanRpc.Api.GetTransactionStatus.FAILED) {
-      throw new ContractError(`Transaction failed on-chain: ${hash}`);
+      throw new ContractError(
+        `Transaction failed on-chain: ${hash}`,
+        mapContractErrorCode(status),
+      );
     }
     attempts++;
   }
-  throw new ContractError(`Transaction not confirmed after polling: ${hash}`);
+  throw new ContractError(
+    `Transaction not confirmed after polling: ${hash}`,
+    mapContractErrorCode("timeout"),
+  );
 }
 
 export interface ContractCampaignInfo {
@@ -449,7 +458,7 @@ export async function estimateContributionGas(
 
   const result = await rpc.simulateTransaction(tx);
   if (SorobanRpc.Api.isSimulationError(result)) {
-    throw new ContractError(result.error);
+    throw new ContractError(result.error, mapContractErrorCode(result.error));
   }
   const sim = result as SorobanRpc.Api.SimulateTransactionSuccessResponse;
   const feeStroops = parseInt(sim.minResourceFee ?? "0", 10);
