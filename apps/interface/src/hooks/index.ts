@@ -10,8 +10,10 @@ export type {
   InfiniteListPage,
 } from "./useInfiniteList";
 
-// Wallet hook — single source of wallet state for all components
+// Wallet hook + context — single source of wallet state for all components
 export { useWallet } from "./useWallet";
+export { WalletProvider, WalletContext } from "./useWallet";
+export type { WalletContextValue, WalletProviderProps } from "./useWallet";
 
 // Domain hooks
 export {

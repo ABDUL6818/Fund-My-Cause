@@ -12,6 +12,7 @@ import type {
   AchievementUnlockedEvent,
 } from "@/types/gamification";
 import { QUERY_KEYS } from "@/lib/queryKeys";
+import { queryDefaults, mutationDefaults } from "@/lib/queryClient";
 
 interface UseAchievementsParams {
   userAddress?: string;
@@ -223,11 +224,9 @@ export function useAchievements({
     error: achievementsError,
   } = useQuery<Achievement[]>({
     queryKey: QUERY_KEYS.achievements(userAddress ?? ""),
-    queryFn: () =>
-      userAddress
-        ? fetchUserAchievements(userAddress)
-        : Promise.resolve([]),
+    queryFn: () => fetchUserAchievements(userAddress as string),
     enabled: enabled && !!userAddress,
+    ...queryDefaults,
   });
 
   // Fetch achievement progress
@@ -237,11 +236,9 @@ export function useAchievements({
     error: progressError,
   } = useQuery<AchievementProgress[]>({
     queryKey: QUERY_KEYS.achievementProgress(userAddress ?? ""),
-    queryFn: () =>
-      userAddress
-        ? fetchAchievementProgress(userAddress)
-        : Promise.resolve([]),
+    queryFn: () => fetchAchievementProgress(userAddress as string),
     enabled: enabled && !!userAddress,
+    ...queryDefaults,
   });
 
   // Fetch gamification profile
@@ -249,13 +246,11 @@ export function useAchievements({
     data: profile,
     isLoading: profileLoading,
     error: profileError,
-  } = useQuery<GamificationProfile>({
+  } = useQuery<GamificationProfile | null>({
     queryKey: QUERY_KEYS.gamificationProfile(userAddress ?? ""),
-    queryFn: () =>
-      userAddress
-        ? fetchGamificationProfile(userAddress)
-        : Promise.resolve(null as unknown as GamificationProfile),
+    queryFn: () => fetchGamificationProfile(userAddress as string),
     enabled: enabled && !!userAddress,
+    ...queryDefaults,
   });
 
   // Mutation to unlock achievement
@@ -294,6 +289,7 @@ export function useAchievements({
         queryKey: QUERY_KEYS.gamificationProfile(userAddress ?? ""),
       });
     },
+    ...mutationDefaults,
   });
 
   // Mutation to share achievement
@@ -308,6 +304,7 @@ export function useAchievements({
       // Mocked pending Issue #12 (no share-tracking entrypoint on the
       // achievements contract yet). Replace with a real API/contract call once #12 lands.
     },
+    ...mutationDefaults,
   });
 
   // Compute statistics
@@ -331,7 +328,7 @@ export function useAchievements({
     // Data
     achievements,
     progressData,
-    profile,
+    profile: profile ?? null,
     stats,
 
     // Loading states
@@ -341,7 +338,7 @@ export function useAchievements({
     profileLoading,
 
     // Errors
-    error: achievementsError || progressError || profileError,
+    error: achievementsError ?? progressError ?? profileError ?? null,
     achievementsError,
     progressError,
     profileError,

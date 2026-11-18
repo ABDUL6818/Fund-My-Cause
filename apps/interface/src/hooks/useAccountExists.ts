@@ -1,5 +1,6 @@
-import { useState, useEffect } from "react";
-import { HORIZON_URL } from "@/lib/constants";
+import { useQuery } from "@tanstack/react-query";
+import { getHorizonServer } from "@/lib/stellar";
+import { queryKeys } from "@/lib/queryKeys";
 
 /**
  * Checks whether a Stellar account is funded (exists on the network).
@@ -7,22 +8,21 @@ import { HORIZON_URL } from "@/lib/constants";
  * @returns {{ exists: boolean, loading: boolean }}
  */
 export function useAccountExists(address: string | null): { exists: boolean; loading: boolean } {
-  const [exists, setExists] = useState(false);
-  const [loading, setLoading] = useState(false);
+  const { data, isLoading } = useQuery({
+    queryKey: queryKeys.accountExists(address ?? ""),
+    queryFn: async () => {
+      if (!address) return false;
+      try {
+        await getHorizonServer().accounts().accountId(address).call();
+        return true;
+      } catch {
+        return false;
+      }
+    },
+    enabled: !!address,
+    staleTime: 30_000,
+    retry: 1,
+  });
 
-  useEffect(() => {
-    if (!address) {
-      setExists(false);
-      return;
-    }
-    let cancelled = false;
-    setLoading(true);
-    fetch(`${HORIZON_URL}/accounts/${address}`)
-      .then((res) => { if (!cancelled) setExists(res.ok); })
-      .catch(() => { if (!cancelled) setExists(false); })
-      .finally(() => { if (!cancelled) setLoading(false); });
-    return () => { cancelled = true; };
-  }, [address]);
-
-  return { exists, loading };
+  return { exists: !!address && !!data, loading: !!address && isLoading };
 }

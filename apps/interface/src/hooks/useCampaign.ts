@@ -4,6 +4,7 @@ import { fetchCampaignView } from "@/lib/graphql/client";
 import type { CampaignInfo, CampaignStats } from "@fund-my-cause/types";
 import { isValidContractId } from "@/lib/validation";
 import { QUERY_KEYS } from "@/lib/queryKeys";
+import { QUERY_DEFAULTS } from "@/lib/queryClient";
 
 export interface CampaignInitialData {
   info: CampaignInfo;
@@ -38,7 +39,8 @@ export function useCampaign(
     queryKey: QUERY_KEYS.campaign(contractId),
     queryFn: () => fetchCampaignView(contractId),
     enabled: isValidContractId(contractId),
-    retry: false,
+    // Inherit shared caching/retry config from the QueryClient defaults.
+    ...QUERY_DEFAULTS.campaign,
     // SSR-preloaded data seeds the cache so the first render is instant and
     // the component never enters the loading skeleton state on page load.
     initialData: initialData ?? undefined,

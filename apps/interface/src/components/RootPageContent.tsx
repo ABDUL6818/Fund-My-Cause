@@ -3,6 +3,7 @@
 import React from "react";
 import { ErrorBoundary } from "@fund-my-cause/components";
 import { DevErrorSimulator } from "@/components/DevErrorSimulator";
+import { WalletProvider } from "@/context/WalletContext";
 
 interface RootPageContentProps {
   children: React.ReactNode;
@@ -11,8 +12,10 @@ interface RootPageContentProps {
 export function RootPageContent({ children }: RootPageContentProps) {
   return (
     <ErrorBoundary level="page">
-      <DevErrorSimulator />
-      {children}
+      <WalletProvider>
+        <DevErrorSimulator />
+        {children}
+      </WalletProvider>
     </ErrorBoundary>
   );
 }

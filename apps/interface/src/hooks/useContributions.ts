@@ -1,7 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { fetchContribution, fetchAllCampaigns } from "@/lib/graphql/client";
+import { queryKeys } from "@/lib/query/keys";
 
 export interface ContributionEntry {
   contractId: string;
@@ -21,75 +22,53 @@ interface UseContributionsResult {
  * Fetches all contributions made by the given address across all known campaigns.
  * Sorts results by date descending (most recent first).
  */
-export function useContributions(address: string): UseContributionsResult {
-  const [contributions, setContributions] = useState<ContributionEntry[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [nonce, setNonce] = useState(0);
+async function loadContributions(address: string): Promise<ContributionEntry[]> {
+  const campaigns = await fetchAllCampaigns();
+  const results = await Promise.allSettled(
+    campaigns.map(async (campaign) => {
+      const amount = await fetchContribution(campaign.contractId, address);
+      return { campaign, amount };
+    }),
+  );
 
-  const retry = useCallback(() => setNonce((n) => n + 1), []);
-
-  useEffect(() => {
-    if (!address) {
-      setContributions([]);
-      return;
+  const entries: ContributionEntry[] = [];
+  for (const result of results) {
+    if (result.status === "fulfilled" && result.value.amount > 0) {
+      const { campaign, amount } = result.value;
+      entries.push({
+        contractId: campaign.contractId,
+        campaignTitle: campaign.title,
+        amount,
+        // Use campaign deadline as a proxy date when no tx timestamp available
+        date: new Date(campaign.deadline).getTime(),
+      });
     }
+  }
 
-    let cancelled = false;
+  // Sort by date descending
+  entries.sort((a, b) => b.date - a.date);
+  return entries;
+}
 
-    const load = async () => {
-      setLoading(true);
-      setError(null);
+export function useContributions(address: string): UseContributionsResult {
+  const query = useQuery({
+    queryKey: queryKeys.contributions.byAddress(address),
+    queryFn: () => loadContributions(address),
+    enabled: Boolean(address),
+  });
 
-      try {
-        const campaigns = await fetchAllCampaigns();
-        const results = await Promise.allSettled(
-          campaigns.map(async (campaign) => {
-            const amount = await fetchContribution(
-              campaign.contractId,
-              address,
-            );
-            return { campaign, amount };
-          }),
-        );
+  const retry = useCallback(() => {
+    void query.refetch();
+  }, [query]);
 
-        if (cancelled) return;
-
-        const entries: ContributionEntry[] = [];
-        for (const result of results) {
-          if (result.status === "fulfilled" && result.value.amount > 0) {
-            const { campaign, amount } = result.value;
-            entries.push({
-              contractId: campaign.contractId,
-              campaignTitle: campaign.title,
-              amount,
-              // Use campaign deadline as a proxy date when no tx timestamp available
-              date: new Date(campaign.deadline).getTime(),
-            });
-          }
-        }
-
-        // Sort by date descending
-        entries.sort((a, b) => b.date - a.date);
-        setContributions(entries);
-      } catch (err) {
-        if (!cancelled) {
-          setError(
-            err instanceof Error
-              ? err.message
-              : "Failed to load contributions.",
-          );
-        }
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    };
-
-    load();
-    return () => {
-      cancelled = true;
-    };
-  }, [address, nonce]);
-
-  return { contributions, loading, error, retry };
+  return {
+    contributions: address ? (query.data ?? []) : [],
+    loading: Boolean(address) && query.isLoading,
+    error: query.error
+      ? query.error instanceof Error
+        ? query.error.message
+        : "Failed to load contributions."
+      : null,
+    retry,
+  };
 }

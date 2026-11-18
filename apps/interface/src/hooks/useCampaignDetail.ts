@@ -3,6 +3,7 @@ import {
   getCampaignDetailData,
   type CampaignDetailViewData,
 } from "@/lib/campaignDetail";
+import { QUERY_KEYS } from "@/lib/queryKeys";
 
 export interface UseCampaignDetailOptions {
   initialData?: CampaignDetailViewData;
@@ -14,7 +15,7 @@ export function useCampaignDetail(
   options?: UseCampaignDetailOptions,
 ) {
   return useQuery<CampaignDetailViewData, Error>({
-    queryKey: ["campaign-detail", campaignId],
+    queryKey: QUERY_KEYS.campaignDetail(campaignId),
     queryFn: () => getCampaignDetailData(campaignId),
     enabled: options?.enabled ?? Boolean(campaignId),
     initialData: options?.initialData,
