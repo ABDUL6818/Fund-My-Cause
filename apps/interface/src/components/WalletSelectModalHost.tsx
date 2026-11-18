@@ -21,6 +21,9 @@ const WalletSelectModal = dynamic(
  * Renders the wallet picker whenever useWallet()'s connect() is called.
  * Lives outside the WalletContext's old Provider tree since Zustand stores
  * don't need one — mount this once near the app root.
+ *
+ * WalletSelectModal renders through the shared components-lib Modal, so this
+ * host stays a thin wrapper with no interface-local modal markup.
  */
 export function WalletSelectModalHost() {
   const {
