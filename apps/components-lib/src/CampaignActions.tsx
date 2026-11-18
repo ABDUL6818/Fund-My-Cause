@@ -56,10 +56,10 @@ export interface CampaignActionsProps {
 }
 
 const DEFAULT_ICON_BUTTON =
-  "p-2 rounded-full transition touch-manipulation min-w-[44px] min-h-[44px] flex items-center justify-center";
+  "p-2 rounded-full transition touch-manipulation min-w-[44px] min-h-[44px] flex items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[var(--color-focus-ring)]";
 
 const DEFAULT_DONATE =
-  "w-full py-3 rounded-lg font-medium disabled:opacity-50 disabled:cursor-not-allowed touch-manipulation";
+  "w-full py-3 rounded-lg font-medium disabled:opacity-50 disabled:cursor-not-allowed touch-manipulation focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[var(--color-focus-ring)]";
 
 /**
  * Action controls for a campaign — donate, share and save.
@@ -96,7 +96,11 @@ export function CampaignActions({
     return (
       <p
         role="alert"
-        className={cn("text-sm text-red-500", classNames?.root, className)}
+        className={cn(
+          "text-sm text-[var(--color-danger-text)]",
+          classNames?.root,
+          className,
+        )}
       >
         {error}
       </p>

@@ -21,6 +21,10 @@ const WalletSelectModal = dynamic(
  * Renders the wallet picker whenever useWallet()'s connect() is called.
  * Lives outside the WalletContext's old Provider tree since Zustand stores
  * don't need one — mount this once near the app root.
+ *
+ * The modal itself owns its focus trap and restores focus to the previously
+ * focused element on close, so this host only needs to avoid rendering any
+ * focusable content while hidden.
  */
 export function WalletSelectModalHost() {
   const {
@@ -36,12 +40,12 @@ export function WalletSelectModalHost() {
     [connectWithAction, addToast],
   );
 
+  const handleClose = useCallback(
+    () => setShowWalletSelect(false),
+    [setShowWalletSelect],
+  );
+
   if (!showWalletSelect) return null;
 
-  return (
-    <WalletSelectModal
-      onSelect={handleSelect}
-      onClose={() => setShowWalletSelect(false)}
-    />
-  );
+  return <WalletSelectModal onSelect={handleSelect} onClose={handleClose} />;
 }

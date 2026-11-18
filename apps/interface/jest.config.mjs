@@ -34,11 +34,16 @@ const config = {
     "^vitest$": "<rootDir>/src/__mocks__/vitest.ts",
     "\\.css$": "<rootDir>/src/__mocks__/styleMock.js",
     "^@/(.*)$": "<rootDir>/src/$1",
-    "\\.css$": "<rootDir>/src/__mocks__/styleMock.js",
   },
   setupFiles: ["<rootDir>/jest.polyfills.ts"],
+  // jest.setup.ts registers jest-axe matchers (toHaveNoViolations) for
+  // accessibility assertions (issues #1670, #1671).
   setupFilesAfterEnv: ["<rootDir>/jest.setup.ts"],
-  transformIgnorePatterns: ["node_modules/(?!(@walletconnect|uint8arrays)/)"],
+  // Workspace packages ship untranspiled TypeScript source, so they must be
+  // transformed even though they resolve through node_modules.
+  transformIgnorePatterns: [
+    "node_modules/(?!(@walletconnect|uint8arrays|@fund-my-cause)/)",
+  ],
   coverageThreshold: {
     global: {
       lines: 85,

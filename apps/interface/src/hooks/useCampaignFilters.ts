@@ -1,11 +1,10 @@
 import { useRouter, useSearchParams } from "next/navigation";
 import React from "react";
-
-function toFiniteNumber(value: string | null): number | null {
-  if (!value) return null;
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : null;
-}
+import {
+  toFiniteNumber,
+  buildSearchParams,
+  applyDefaultParamRemoval,
+} from "@packages/shared-utils";
 
 export type FilterTab = "all" | "active" | "funded" | "ended";
 export type SortOption = "recent" | "popular" | "deadline" | "progress";
@@ -67,16 +66,8 @@ export function useCampaignFilters(): UseCampaignFiltersReturn {
 
   const setParam = React.useCallback(
     (key: string, value: string) => {
-      const params = new URLSearchParams(searchParams.toString());
-      if (value === "") {
-        params.delete(key);
-      } else if (key === "filter" && value === "all") {
-        params.delete(key);
-      } else if (key === "sort" && value === "recent") {
-        params.delete(key);
-      } else {
-        params.set(key, value);
-      }
+      const params = buildSearchParams(searchParams.toString());
+      applyDefaultParamRemoval(params, key, value);
       if (key !== "page") params.delete("page");
       router.replace(`/campaigns?${params.toString()}`, { scroll: false });
     },
@@ -84,15 +75,17 @@ export function useCampaignFilters(): UseCampaignFiltersReturn {
   );
 
   const applyAdvanced = () => {
-    const params = new URLSearchParams(searchParams.toString());
-    if (goalMin) params.set("goalMin", goalMin);
-    else params.delete("goalMin");
-    if (goalMax) params.set("goalMax", goalMax);
-    else params.delete("goalMax");
-    if (dateFrom) params.set("dateFrom", dateFrom);
-    else params.delete("dateFrom");
-    if (dateTo) params.set("dateTo", dateTo);
-    else params.delete("dateTo");
+    const params = buildSearchParams(searchParams.toString());
+    const advancedValues: Record<string, string> = {
+      goalMin,
+      goalMax,
+      dateFrom,
+      dateTo,
+    };
+    Object.entries(advancedValues).forEach(([key, value]) => {
+      if (value) params.set(key, value);
+      else params.delete(key);
+    });
     params.delete("page");
     router.replace(`/campaigns?${params.toString()}`, { scroll: false });
     setShowAdvanced(false);
@@ -103,7 +96,7 @@ export function useCampaignFilters(): UseCampaignFiltersReturn {
     setGoalMax("");
     setDateFrom("");
     setDateTo("");
-    const params = new URLSearchParams(searchParams.toString());
+    const params = buildSearchParams(searchParams.toString());
     ["goalMin", "goalMax", "dateFrom", "dateTo"].forEach((k) =>
       params.delete(k),
     );

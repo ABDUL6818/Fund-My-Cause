@@ -27,6 +27,26 @@ export {
 } from "./utils/formatCampaignCard";
 export { cn } from "./lib/utils";
 
+// ── Design tokens (single source of truth, shared with apps/interface) ─────
+export {
+  designTokens,
+  colors,
+  spacing,
+  radii,
+  typography,
+  shadows,
+  breakpoints,
+  zIndex,
+  type DesignTokens,
+  type ColorTokens,
+  type SpacingTokens,
+  type RadiusTokens,
+  type TypographyTokens,
+  type ShadowTokens,
+  type BreakpointTokens,
+  type ZIndexTokens,
+} from "./tokens";
+
 // ── Form primitives ────────────────────────────────────────────────────────
 export {
   FormField,

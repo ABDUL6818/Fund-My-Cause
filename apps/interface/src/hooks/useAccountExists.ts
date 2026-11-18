@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { HORIZON_URL } from "@/lib/constants";
+import { fetchWithRetry } from "@stellar/shared-utils";
 
 /**
  * Checks whether a Stellar account is funded (exists on the network).
@@ -13,15 +14,29 @@ export function useAccountExists(address: string | null): { exists: boolean; loa
   useEffect(() => {
     if (!address) {
       setExists(false);
+      setLoading(false);
       return;
     }
-    let cancelled = false;
+
+    const controller = new AbortController();
     setLoading(true);
-    fetch(`${HORIZON_URL}/accounts/${address}`)
-      .then((res) => { if (!cancelled) setExists(res.ok); })
-      .catch(() => { if (!cancelled) setExists(false); })
-      .finally(() => { if (!cancelled) setLoading(false); });
-    return () => { cancelled = true; };
+
+    fetchWithRetry(`${HORIZON_URL}/accounts/${address}`, {
+      signal: controller.signal,
+    })
+      .then((res) => {
+        if (!controller.signal.aborted) setExists(res.ok);
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) setExists(false);
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setLoading(false);
+      });
+
+    return () => {
+      controller.abort();
+    };
   }, [address]);
 
   return { exists, loading };

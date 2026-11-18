@@ -3,7 +3,7 @@ import { useState, useCallback } from "react";
 import { fetchCampaignView } from "@/lib/graphql/client";
 import type { CampaignInfo, CampaignStats } from "@fund-my-cause/types";
 import { isValidContractId } from "@/lib/validation";
-import { QUERY_KEYS } from "@/lib/queryKeys";
+import { QUERY_KEYS } from "@fund-my-cause/shared-utils";
 
 export interface CampaignInitialData {
   info: CampaignInfo;
@@ -93,126 +93,86 @@ export function useCampaign(
   };
 }
 
-export function useContribute(contractId: string) {
+type SignTx = (xdr: string) => Promise<string>;
+
+/**
+ * Shared factory for campaign mutations. All campaign mutations follow the
+ * same shape: run a contract call, then invalidate the campaign query so the
+ * cached info/stats are refreshed. Extracted here to dedupe the previously
+ * copy-pasted mutation hooks.
+ */
+function useCampaignMutation<TVars>(
+  contractId: string,
+  mutationFn: (vars: TVars) => Promise<unknown>,
+) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async ({
-      contributor,
-      amount,
-      signTx,
-    }: {
-      contributor: string;
-      amount: bigint;
-      signTx: (xdr: string) => Promise<string>;
-    }) => {
-      const { contribute } = await import("@/lib/contract");
-      return contribute(contractId, contributor, amount, signTx);
-    },
+    mutationFn,
     onSuccess: () =>
       queryClient.invalidateQueries({
         queryKey: QUERY_KEYS.campaign(contractId),
       }),
+  });
+}
+
+export function useContribute(contractId: string) {
+  return useCampaignMutation<{
+    contributor: string;
+    amount: bigint;
+    signTx: SignTx;
+  }>(contractId, async ({ contributor, amount, signTx }) => {
+    const { contribute } = await import("@/lib/contract");
+    return contribute(contractId, contributor, amount, signTx);
   });
 }
 
 export function useWithdraw(contractId: string) {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: async ({
-      creator,
-      signTx,
-    }: {
-      creator: string;
-      signTx: (xdr: string) => Promise<string>;
-    }) => {
+  return useCampaignMutation<{ creator: string; signTx: SignTx }>(
+    contractId,
+    async ({ creator, signTx }) => {
       const { withdraw } = await import("@/lib/contract");
       return withdraw(contractId, creator, signTx);
     },
-    onSuccess: () =>
-      queryClient.invalidateQueries({
-        queryKey: QUERY_KEYS.campaign(contractId),
-      }),
-  });
+  );
 }
 
 export function useRefund(contractId: string) {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: async ({
-      contributor,
-      signTx,
-    }: {
-      contributor: string;
-      signTx: (xdr: string) => Promise<string>;
-    }) => {
+  return useCampaignMutation<{ contributor: string; signTx: SignTx }>(
+    contractId,
+    async ({ contributor, signTx }) => {
       const { refundSingle } = await import("@/lib/contract");
       return refundSingle(contractId, contributor, signTx);
     },
-    onSuccess: () =>
-      queryClient.invalidateQueries({
-        queryKey: QUERY_KEYS.campaign(contractId),
-      }),
-  });
+  );
 }
 
 export function useBatchRefund(contractId: string) {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: async ({
-      caller,
-      contributors,
-      signTx,
-    }: {
-      caller: string;
-      contributors: string[];
-      signTx: (xdr: string) => Promise<string>;
-    }) => {
-      const { refundBatch } = await import("@/lib/contract");
-      return refundBatch(contractId, caller, contributors, signTx);
-    },
-    onSuccess: () =>
-      queryClient.invalidateQueries({
-        queryKey: QUERY_KEYS.campaign(contractId),
-      }),
+  return useCampaignMutation<{
+    caller: string;
+    contributors: string[];
+    signTx: SignTx;
+  }>(contractId, async ({ caller, contributors, signTx }) => {
+    const { refundBatch } = await import("@/lib/contract");
+    return refundBatch(contractId, caller, contributors, signTx);
   });
 }
 
 export function usePause(contractId: string) {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: async ({
-      admin,
-      signTx,
-    }: {
-      admin: string;
-      signTx: (xdr: string) => Promise<string>;
-    }) => {
+  return useCampaignMutation<{ admin: string; signTx: SignTx }>(
+    contractId,
+    async ({ admin, signTx }) => {
       const { pauseCampaign } = await import("@/lib/contract");
       return pauseCampaign(contractId, admin, signTx);
     },
-    onSuccess: () =>
-      queryClient.invalidateQueries({
-        queryKey: QUERY_KEYS.campaign(contractId),
-      }),
-  });
+  );
 }
 
 export function useUnpause(contractId: string) {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: async ({
-      admin,
-      signTx,
-    }: {
-      admin: string;
-      signTx: (xdr: string) => Promise<string>;
-    }) => {
+  return useCampaignMutation<{ admin: string; signTx: SignTx }>(
+    contractId,
+    async ({ admin, signTx }) => {
       const { unpauseCampaign } = await import("@/lib/contract");
       return unpauseCampaign(contractId, admin, signTx);
     },
-    onSuccess: () =>
-      queryClient.invalidateQueries({
-        queryKey: QUERY_KEYS.campaign(contractId),
-      }),
-  });
+  );
 }

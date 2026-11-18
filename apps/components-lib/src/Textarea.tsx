@@ -3,7 +3,7 @@
 import React, { TextareaHTMLAttributes, ReactNode, forwardRef } from "react";
 import { cn } from "./lib/utils";
 import { FormField } from "./FormField";
-import { controlClassName } from "./lib/formStyles";
+import { controlClassName, focusRingClassName } from "./lib/formStyles";
 
 export interface TextareaProps
   extends Omit<TextareaHTMLAttributes<HTMLTextAreaElement>, "id"> {
@@ -71,6 +71,7 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(
           {...control}
           className={cn(
             controlClassName({ unstyled, hasError: Boolean(error), fullWidth }),
+            !unstyled && focusRingClassName,
             className,
           )}
           {...props}
