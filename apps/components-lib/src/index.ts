@@ -72,6 +72,10 @@ export {
   CampaignDetailSkeleton,
   type CampaignDetailSkeletonProps,
 } from "./CampaignDetailSkeleton";
+export {
+  CampaignListSkeleton,
+  type CampaignListSkeletonProps,
+} from "./CampaignListSkeleton";
 
 export {
   ThemeProvider,

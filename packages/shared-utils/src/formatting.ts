@@ -227,13 +227,18 @@ export function formatPercentage(
 // ── Date Formatting ──────────────────────────────────────────────────────
 
 /** "Mar 19, 2026" — uses locale-aware date formatting */
-export function formatDate(timestamp: number, locale: string = "en"): string {
+export function formatDate(
+  timestamp: number,
+  locale: string = "en",
+  timeZone?: string,
+): string {
   return new Date(timestamp * 1000).toLocaleDateString(
     localeToIntlCode(locale),
     {
       month: "short",
       day: "numeric",
       year: "numeric",
+      ...(timeZone ? { timeZone } : {}),
     },
   );
 }
@@ -264,10 +269,12 @@ export function formatLocalTime(
 export function formatDateTime(
   timestamp: number,
   locale: string = "en",
+  timeZone?: string,
 ): string {
   return new Date(timestamp * 1000).toLocaleString(localeToIntlCode(locale), {
     dateStyle: "medium",
     timeStyle: "short",
+    ...(timeZone ? { timeZone } : {}),
   });
 }
 
@@ -282,8 +289,14 @@ export function formatLocalDateTime(
   return dateObj.toLocaleString(intlCode, options);
 }
 
-/** "5d 3h 22m" or "Ended" — caller should use i18n for the "Ended" string */
-export function formatTimeLeft(deadline: number): string {
+/**
+ * "5d 3h 22m" or "Ended" — caller should use i18n for the "Ended" string.
+ *
+ * The optional `timeZone` is accepted for API symmetry with the other date
+ * helpers; the remaining-time calculation is timezone-independent.
+ */
+export function formatTimeLeft(deadline: number, timeZone?: string): string {
+  void timeZone;
   const diff = deadline * 1000 - Date.now();
   if (diff <= 0) return "Ended";
   const d = Math.floor(diff / 86_400_000);
@@ -300,6 +313,7 @@ export function formatTimeLeft(deadline: number): string {
 export function formatRelativeTime(
   pastDate: Date | number,
   locale: string = "en",
+  timeZone?: string,
 ): string {
   const intlCode = localeToIntlCode(locale);
   const now = new Date();
@@ -307,7 +321,10 @@ export function formatRelativeTime(
     typeof pastDate === "number" ? new Date(pastDate * 1000) : pastDate;
   const seconds = Math.floor((now.getTime() - date.getTime()) / 1000);
 
-  const rtf = new Intl.RelativeTimeFormat(intlCode, { numeric: "auto" });
+  const rtf = new Intl.RelativeTimeFormat(intlCode, {
+    numeric: "auto",
+    ...(timeZone ? { timeZone } : {}),
+  });
 
   if (seconds < 60) return rtf.format(-seconds, "second");
   if (seconds < 3600) return rtf.format(-Math.floor(seconds / 60), "minute");
