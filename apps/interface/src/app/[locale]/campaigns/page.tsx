@@ -20,11 +20,8 @@
 import React, { Suspense, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Navbar } from "@/components/layout/Navbar";
-import { LazyPledgeModal as PledgeModal } from "@/lib/lazy-components";
-import { ShareModal } from "@/components/ui/ShareModal";
 import { LoadingSkeletonGrid } from "@/components/ui/LoadingSkeleton";
 import { ALL_CAMPAIGNS } from "@/lib/campaigns";
-import { GitCompare } from "lucide-react";
 import { useComparison } from "@/context/ComparisonContext";
 import { useTranslations } from "next-intl";
 import {
@@ -34,6 +31,7 @@ import {
 } from "@/hooks/useCampaignFilters";
 import { CampaignFilters } from "@/components/campaigns/CampaignFilters";
 import { CampaignList } from "@/components/campaigns/CampaignList";
+import { CampaignsView } from "@/components/campaigns/CampaignsView";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -65,6 +63,13 @@ const CATEGORIES = Array.from(
 ) as string[];
 
 const PAGE_SIZE = 9;
+
+const FILTER_TABS: { value: FilterTab; label: string }[] = [
+  { value: "all", label: "All" },
+  { value: "active", label: "Active" },
+  { value: "funded", label: "Funded" },
+  { value: "ended", label: "Ended" },
+];
 
 // ── Container ─────────────────────────────────────────────────────────────────
 
@@ -192,28 +197,6 @@ function CampaignsContainer() {
         query={filters.query}
       />
 
-      {totalPages > 1 && filtered.length > 0 && (
-        <div className="flex items-center justify-center gap-4 mt-10">
-          <button
-            onClick={() => setPage(currentPage - 1)}
-            disabled={currentPage === 1}
-            className="px-4 py-2 rounded-xl bg-gray-800 text-sm text-gray-300 hover:bg-gray-700 disabled:opacity-30 transition"
-          >
-            {t("previous")}
-          </button>
-          <span className="text-sm text-gray-400">
-            {t("page", { current: currentPage, total: totalPages })}
-          </span>
-          <button
-            onClick={() => setPage(currentPage + 1)}
-            disabled={currentPage === totalPages}
-            className="px-4 py-2 rounded-xl bg-gray-800 text-sm text-gray-300 hover:bg-gray-700 disabled:opacity-30 transition"
-          >
-            {t("next")}
-          </button>
-        </div>
-      )}
-
   // ── Callbacks ─────────────────────────────────────────────────────────────
   const handlePageChange = (p: number) => {
     const params = new URLSearchParams();
@@ -235,7 +218,7 @@ function CampaignsContainer() {
       filtered={filtered}
       categories={CATEGORIES}
       filters={filters}
-      filterTabs={filterTabs}
+      filterTabs={FILTER_TABS}
       inputValue={inputValue}
       showAdvanced={showAdvanced}
       hasAdvanced={hasAdvanced}

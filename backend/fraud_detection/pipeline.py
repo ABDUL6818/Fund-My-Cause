@@ -19,6 +19,8 @@ import structlog
 from fastapi import FastAPI, BackgroundTasks, Request, Response
 from fastapi.responses import JSONResponse
 
+from errors import register_exception_handlers
+
 # Shared scoring helpers — single implementation per #1514.
 from scoring import jaccard_similarity
 
@@ -410,6 +412,9 @@ async def lifespan(app_: FastAPI) -> AsyncIterator[None]:
 
 app = FastAPI(title="Fund-My-Cause Fraud Detection", version="1.2.0", lifespan=lifespan)
 app.add_middleware(TraceIDMiddleware)
+
+# Central error handling — single source of truth for error responses.
+register_exception_handlers(app)
 
 app.get("/healthz")(_healthz)
 app.get("/readyz")(_readyz)

@@ -17,11 +17,10 @@ import {
   validateCampaignDeadline,
   validateMinContribution as sharedValidateMinContribution,
   validateFeeBps as sharedValidateFeeBps,
+  validateContractId as sharedValidateContractId,
+  validateVideoUrl as sharedValidateVideoUrl,
+  validateMaxContribution as sharedValidateMaxContribution,
 } from "@fund-my-cause/types";
-import {
-  optionalXlmCapSchema,
-  firstSchemaError,
-} from "@/lib/validationSchemas";
 import { sanitizeText } from "@/lib/sanitize";
 
 // Re-export shared constants for callers that import them from this module.
@@ -43,42 +42,23 @@ export {
  * Contract IDs start with 'C', are 56 characters long, and use valid base32 characters.
  */
 export function isValidContractId(id: string): boolean {
-  if (!id || typeof id !== "string") {
-    return false;
-  }
-  if (!id.startsWith("C") || id.length !== 56) {
-    return false;
-  }
-  const base32Regex = /^C[A-Z2-7]{55}$/;
-  return base32Regex.test(id);
+  return sharedValidateContractId(id) === null;
 }
 
+/**
+ * Validate a Stellar contract ID.
+ * @returns Error message if invalid, null if valid
+ */
 export function validateContractId(id: string): string | null {
-  if (!id || !id.trim()) {
-    return "Contract ID is required.";
-  }
-  if (!isValidContractId(id.trim())) {
-    return "Contract ID is invalid.";
-  }
-  return null;
+  return sharedValidateContractId(id);
 }
 
+/**
+ * Validate an optional video URL.
+ * @returns Error message if invalid, null if valid
+ */
 export function validateVideoUrl(videoUrl: string): string | null {
-  if (!videoUrl || !videoUrl.trim()) {
-    return null;
-  }
-
-  const trimmed = videoUrl.trim();
-  if (!/^https:\/\//i.test(trimmed)) {
-    return "Enter a valid URL starting with https://";
-  }
-
-  try {
-    new URL(trimmed);
-    return null;
-  } catch {
-    return "Enter a valid URL.";
-  }
+  return sharedValidateVideoUrl(videoUrl);
 }
 
 /**
@@ -91,17 +71,7 @@ export function validateMaxContribution(
   maxContribution: string,
   minContribution: string,
 ): string | null {
-  const minNum = Number(minContribution);
-  const min = !isNaN(minNum) && minNum > 0 ? minNum : 0;
-
-  return firstSchemaError(
-    optionalXlmCapSchema(min, {
-      invalid: "Maximum contribution must be a non-negative number.",
-      belowMinimum:
-        "Maximum contribution cannot be less than minimum contribution.",
-    }),
-    maxContribution,
-  );
+  return sharedValidateMaxContribution(maxContribution, minContribution);
 }
 
 /**

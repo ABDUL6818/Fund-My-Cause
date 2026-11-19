@@ -21,6 +21,7 @@ const UpdatesFeed = dynamic(
 );
 import { useCampaign } from "@/hooks/useCampaign";
 import { useWallet } from "@/hooks/useWallet";
+import { CampaignProvider, useCampaignContext } from "./CampaignContext";
 import { CampaignActions } from "./CampaignActions";
 import { formatXLM, formatAddress } from "@/lib/format";
 import { SimilarCampaigns } from "@/components/ui/SimilarCampaigns";
@@ -153,6 +154,72 @@ export function CampaignDetailContent({ contractId }: { contractId: string }) {
   const totalRaisedXlm = Number(stats.totalRaised) / 1e7;
 
   return (
+    <CampaignProvider
+      value={{
+        contractId,
+        info,
+        stats,
+        address,
+        progress,
+        deadlineIso,
+        deadlinePassed,
+        goalMet,
+        totalRaisedXlm,
+        pauseReason,
+        applyOptimisticContribution,
+        rollbackOptimistic,
+      }}
+    >
+      <CampaignDetailView
+        contractId={contractId}
+        showConfetti={showConfetti}
+        showSuccessModal={showSuccessModal}
+        showShareModal={showShareModal}
+        onCloseSuccessModal={() => setShowSuccessModal(false)}
+        onCloseShareModal={() => setShowShareModal(false)}
+        onShareFromSuccessModal={() => {
+          setShowSuccessModal(false);
+          setShowShareModal(true);
+        }}
+      />
+    </CampaignProvider>
+  );
+}
+
+interface CampaignDetailViewProps {
+  contractId: string;
+  showConfetti: boolean;
+  showSuccessModal: boolean;
+  showShareModal: boolean;
+  onCloseSuccessModal: () => void;
+  onCloseShareModal: () => void;
+  onShareFromSuccessModal: () => void;
+}
+
+function CampaignDetailView({
+  contractId,
+  showConfetti,
+  showSuccessModal,
+  showShareModal,
+  onCloseSuccessModal,
+  onCloseShareModal,
+  onShareFromSuccessModal,
+}: CampaignDetailViewProps) {
+  const {
+    info,
+    stats,
+    address,
+    progress,
+    deadlineIso,
+    deadlinePassed,
+    goalMet,
+    totalRaisedXlm,
+    pauseReason,
+    applyOptimisticContribution,
+    rollbackOptimistic,
+  } = useCampaignContext();
+
+  return (
     <>
       {showConfetti && <Confetti />}
 
@@ -160,12 +227,9 @@ export function CampaignDetailContent({ contractId }: { contractId: string }) {
         <GoalSuccessModal
           campaignTitle={info.title}
           totalRaisedXlm={totalRaisedXlm}
-          onClose={() => setShowSuccessModal(false)}
-          onShare={() => {
-            setShowSuccessModal(false);
-            setShowShareModal(true);
-          }}
-          onWithdraw={() => setShowSuccessModal(false)}
+          onClose={onCloseSuccessModal}
+          onShare={onShareFromSuccessModal}
+          onWithdraw={onCloseSuccessModal}
           alreadyWithdrawn={info.status === "Successful"}
         />
       )}
@@ -174,7 +238,7 @@ export function CampaignDetailContent({ contractId }: { contractId: string }) {
         <ShareModal
           campaignId={contractId}
           campaignTitle={info.title}
-          onClose={() => setShowShareModal(false)}
+          onClose={onCloseShareModal}
         />
       )}
 
@@ -287,16 +351,7 @@ export function CampaignDetailContent({ contractId }: { contractId: string }) {
           </div>
         )}
 
-        <CampaignActions
-          contractId={contractId}
-          creator={info.creator}
-          deadlinePassed={deadlinePassed}
-          goalMet={goalMet}
-          campaignTitle={info.title}
-          status={info.status}
-          onOptimisticContribute={applyOptimisticContribution}
-          onRollbackOptimistic={rollbackOptimistic}
-        />
+        <CampaignActions />
 
         {/* Team Management (RBAC) — visible once a wallet is connected */}
         {address && (
