@@ -246,3 +246,37 @@ npm run test:coverage           # Jest + coverage report (80% threshold)
 npm run test:e2e                # Playwright E2E tests
 npm run test:vitest             # Vitest alternative runner
 ```
+
+---
+
+## Migrated Notes from Root Summary Docs
+
+The former root-level summary documents (`*_SUMMARY.md`, `ISSUES_COMPLETED.md`) have been retired. This document is now the single source of truth for testing strategy and coverage. The useful content from those files is preserved below.
+
+### Coverage Expectations
+
+- **Overall project target:** 85%+ line coverage on touched code for any PR (see acceptance criteria in issue templates).
+- **Frontend Jest threshold:** 80% enforced via `npm run test:coverage` (configured in `apps/interface/jest.config.*`).
+- **Components library (`apps/interface/src/components`):** unit tests are expected for every exported component; snapshot tests are acceptable for purely presentational components, but interactive components (forms, modals, wallet flows) must have behavior tests using `@testing-library/react`.
+- **Contracts:** every public entry point (`initialize`, `contribute`, `withdraw`, `refund_single`, `cancel`, etc.) must have at least one happy-path and one error-path test, plus fuzz coverage where applicable.
+
+### Historical Issue Completion Notes
+
+The following testing-related milestones were previously tracked in `ISSUES_COMPLETED.md` and remain relevant context:
+
+- Soroban contract test suite established with `soroban_sdk::testutils` (in-process env, no node required).
+- Proptest-based fuzz suite added under `contracts/crowdfund/tests/fuzz_tests.rs`.
+- Playwright E2E suite wired into CI via `playwright.yml`, with HTML report artifacts on failure.
+- Frontend CI hardened with ESLint, `tsc --noEmit`, and `npm audit --audit-level=high`.
+- Coverage reporting added via `npm run test:coverage`; CI gating on unit tests is a known follow-up (see note in the `frontend_ci.yml` section above).
+
+### Where to Find Archived Summaries
+
+If you need the original text of a retired root summary, refer to the git history:
+
+```bash
+git log --diff-filter=D --name-only -- '*_SUMMARY.md' 'ISSUES_COMPLETED.md'
+git show <commit>:<path>
+```
+
+Do not re-create root-level summary files; add new testing notes to this document instead.

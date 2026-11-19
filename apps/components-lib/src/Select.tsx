@@ -4,6 +4,7 @@ import React, { SelectHTMLAttributes, ReactNode, forwardRef } from "react";
 import { cn } from "./lib/utils";
 import { FormField } from "./FormField";
 import { controlClassName } from "./lib/formStyles";
+import { focusRingClassName } from "./lib/tokens";
 
 export interface SelectOption {
   value: string;
@@ -86,11 +87,16 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(
           {...control}
           className={cn(
             controlClassName({ unstyled, hasError: Boolean(error), fullWidth }),
+            focusRingClassName,
             className,
           )}
           {...props}
         >
-          {placeholder && <option value="">{placeholder}</option>}
+          {placeholder && (
+            <option value="" disabled={required}>
+              {placeholder}
+            </option>
+          )}
           {options?.map((option) => (
             <option
               key={option.value}

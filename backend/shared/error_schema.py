@@ -35,8 +35,9 @@ Usage example
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional
+from typing import Any, Dict, Optional
 
+from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
 
@@ -46,6 +47,63 @@ class ErrorCode:
     UNPROCESSABLE_ENTITY: str = "UNPROCESSABLE_ENTITY"
     INTERNAL_ERROR: str = "INTERNAL_ERROR"
     SERVICE_UNAVAILABLE: str = "SERVICE_UNAVAILABLE"
+
+
+class AppError(Exception):
+    """Base class for all application errors.
+
+    Subclasses declare the HTTP status and error code they map to, so route
+    handlers can simply ``raise`` and let the central handler build the
+    response envelope.
+    """
+
+    http_status: int = 500
+    code: str = ErrorCode.INTERNAL_ERROR
+    default_message: str = "An unexpected error occurred"
+
+    def __init__(self, message: Optional[str] = None, detail: Optional[str] = None) -> None:
+        self.message = message if message is not None else self.default_message
+        self.detail = detail
+        super().__init__(self.message)
+
+    def to_response(self) -> JSONResponse:
+        return _make_response(self.http_status, self.code, self.message, self.detail)
+
+
+class BadRequestError(AppError):
+    http_status = 400
+    code = ErrorCode.BAD_REQUEST
+    default_message = "Bad request"
+
+
+class ValidationError(AppError):
+    http_status = 400
+    code = ErrorCode.BAD_REQUEST
+    default_message = "Request validation failed"
+
+
+class NotFoundError(AppError):
+    http_status = 404
+    code = ErrorCode.NOT_FOUND
+    default_message = "Resource not found"
+
+
+class UnprocessableEntityError(AppError):
+    http_status = 422
+    code = ErrorCode.UNPROCESSABLE_ENTITY
+    default_message = "Unprocessable entity"
+
+
+class InternalError(AppError):
+    http_status = 500
+    code = ErrorCode.INTERNAL_ERROR
+    default_message = "An unexpected error occurred"
+
+
+class ServiceUnavailableError(AppError):
+    http_status = 503
+    code = ErrorCode.SERVICE_UNAVAILABLE
+    default_message = "Service unavailable"
 
 
 @dataclass
@@ -59,8 +117,8 @@ class ErrorDetail:
 class ErrorEnvelope:
     error: ErrorDetail
 
-    def to_dict(self) -> dict:
-        result: dict = {
+    def to_dict(self) -> Dict[str, Any]:
+        result: Dict[str, Any] = {
             "error": {
                 "code": self.error.code,
                 "message": self.error.message,
@@ -99,3 +157,39 @@ def internal_error(message: str = "An unexpected error occurred", detail: Option
 
 def service_unavailable(message: str, detail: Optional[str] = None) -> JSONResponse:
     return _make_response(503, ErrorCode.SERVICE_UNAVAILABLE, message, detail)
+
+
+# OpenAPI schema describing the error envelope, for use in route
+# ``responses={...}`` declarations so the generated spec documents errors.
+ERROR_RESPONSE_SCHEMA: Dict[str, Any] = {
+    "type": "object",
+    "required": ["error"],
+    "properties": {
+        "error": {
+            "type": "object",
+            "required": ["code", "message"],
+            "properties": {
+                "code": {
+                    "type": "string",
+                    "enum": [
+                        ErrorCode.BAD_REQUEST,
+                        ErrorCode.NOT_FOUND,
+                        ErrorCode.UNPROCESSABLE_ENTITY,
+                        ErrorCode.INTERNAL_ERROR,
+                        ErrorCode.SERVICE_UNAVAILABLE,
+                    ],
+                },
+                "message": {"type": "string"},
+                "detail": {"type": "string", "nullable": True},
+            },
+        }
+    },
+}
+
+
+def error_response(status_code: int, description: str) -> Dict[str, Any]:
+    """Build a FastAPI ``responses`` entry documenting the error envelope."""
+    return {
+        "description": description,
+        "content": {"application/json": {"schema": ERROR_RESPONSE_SCHEMA}},
+    }

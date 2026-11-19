@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   getCampaignDetailData,
@@ -14,10 +15,33 @@ export function useCampaignDetail(
   campaignId: string,
   options?: UseCampaignDetailOptions,
 ) {
-  return useQuery<CampaignDetailViewData, Error>({
+  const query = useQuery<CampaignDetailViewData, Error>({
     queryKey: QUERY_KEYS.campaignDetail(campaignId),
     queryFn: () => getCampaignDetailData(campaignId),
     enabled: options?.enabled ?? Boolean(campaignId),
     initialData: options?.initialData,
   });
+
+  return useMemo(
+    () => ({
+      data: query.data,
+      error: query.error,
+      isLoading: query.isLoading,
+      isError: query.isError,
+      isSuccess: query.isSuccess,
+      isFetching: query.isFetching,
+      status: query.status,
+      refetch: query.refetch,
+    }),
+    [
+      query.data,
+      query.error,
+      query.isLoading,
+      query.isError,
+      query.isSuccess,
+      query.isFetching,
+      query.status,
+      query.refetch,
+    ],
+  );
 }

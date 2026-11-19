@@ -12,8 +12,9 @@ Log levels follow this convention:
 - ERROR: Error conditions (failed operations, exceptions)
 """
 
+import os
+
 import structlog
-from typing import Any, Dict, Optional
 
 
 def get_logger(name: str) -> structlog.BoundLogger:
@@ -32,13 +33,41 @@ def get_logger(name: str) -> structlog.BoundLogger:
     return structlog.get_logger(name)
 
 
+def get_request_logger(trace_id: str, name: str = "request") -> structlog.BoundLogger:
+    """
+    Get a logger bound to a request/trace ID.
+
+    The trace ID is bound via structlog contextvars so it is merged into
+    every emitted event, including events logged by nested loggers that
+    share the same context.
+
+    Args:
+        trace_id: Request/trace identifier to attach to log records
+        name: Logger name (defaults to "request")
+
+    Returns:
+        Configured structlog logger with the trace ID bound
+    """
+    return structlog.get_logger(name).bind(trace_id=trace_id)
+
+
 def configure_structlog() -> None:
     """
     Configure structlog with standard processors and formatting.
 
     Should be called once at application startup, typically in the
     main entry point or initialization module.
+
+    Output format is selected via the LOG_FORMAT environment variable:
+    - "json" (default in production): machine-readable JSON lines
+    - "console" (default otherwise): human-readable console output
     """
+    log_format = os.getenv("LOG_FORMAT", "json").lower()
+    if log_format == "console":
+        renderer: structlog.types.Processor = structlog.dev.ConsoleRenderer()
+    else:
+        renderer = structlog.processors.JSONRenderer()
+
     structlog.configure(
         processors=[
             structlog.contextvars.merge_contextvars,
@@ -50,75 +79,9 @@ def configure_structlog() -> None:
             structlog.processors.StackInfoRenderer(),
             structlog.processors.format_exc_info,
             structlog.processors.UnicodeDecoder(),
-            structlog.processors.JSONRenderer(),
+            renderer,
         ],
         context_class=dict,
         logger_factory=structlog.stdlib.LoggerFactory(),
         cache_logger_on_first_use=True,
     )
-
-
-def log_debug(logger: structlog.BoundLogger, message: str, **kwargs: Any) -> None:
-    """
-    Log a debug message with structured context.
-
-    Args:
-        logger: Logger instance from get_logger()
-        message: Human-readable message
-        **kwargs: Additional context fields
-    """
-    logger.debug(message, **kwargs)
-
-
-def log_info(logger: structlog.BoundLogger, message: str, **kwargs: Any) -> None:
-    """
-    Log an info message with structured context.
-
-    Args:
-        logger: Logger instance from get_logger()
-        message: Human-readable message
-        **kwargs: Additional context fields
-    """
-    logger.info(message, **kwargs)
-
-
-def log_warning(logger: structlog.BoundLogger, message: str, **kwargs: Any) -> None:
-    """
-    Log a warning message with structured context.
-
-    Args:
-        logger: Logger instance from get_logger()
-        message: Human-readable message
-        **kwargs: Additional context fields
-    """
-    logger.warning(message, **kwargs)
-
-
-def log_error(logger: structlog.BoundLogger, message: str, **kwargs: Any) -> None:
-    """
-    Log an error message with structured context.
-
-    Args:
-        logger: Logger instance from get_logger()
-        message: Human-readable message
-        **kwargs: Additional context fields
-    """
-    logger.error(message, **kwargs)
-
-
-def log_exception(
-    logger: structlog.BoundLogger,
-    message: str,
-    exc: Optional[Exception] = None,
-    **kwargs: Any
-) -> None:
-    """
-    Log an exception with structured context.
-
-    Args:
-        logger: Logger instance from get_logger()
-        message: Human-readable message
-        exc: Exception instance (auto-captured if None)
-        **kwargs: Additional context fields
-    """
-    logger.exception(message, exc_info=exc, **kwargs)

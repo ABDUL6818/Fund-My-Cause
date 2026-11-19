@@ -13,6 +13,16 @@
  * The current backing store is the in-memory EventStore.  Switching to a
  * durable store in the future only requires a new class that satisfies these
  * interfaces — handler code is unaffected.
+ *
+ * Index expectations (#1685):
+ *  - `queryByContract` must be backed by an index on `(contract_id, id DESC)`
+ *    so it never performs a full scan of the event table.
+ *  - `queryByType` must be backed by an index on `(type, id DESC)`.
+ *  - `getAllEvents` relies on the primary key / `id DESC` ordering.
+ *  - `getEventsByCampaign` and `getContributionsForCampaign` are expected to
+ *    be served by the composite index on `(contract_id, type, id DESC)`.
+ * Implementations that cannot satisfy these guarantees must document the
+ * fallback and the reason in their own doc comments.
  */
 
 import type { IndexerEvent } from "./rpc-client.js";
@@ -31,13 +41,22 @@ export interface EventRepository {
   /** Persist a batch of events (idempotent: duplicate IDs are ignored). */
   addEvents(events: IndexerEvent[]): void;
 
-  /** Query events by contract address, newest first. */
+  /**
+   * Query events by contract address, newest first.
+   * Index-backed by `(contract_id, id DESC)` — must not scan the full table.
+   */
   queryByContract(contractId: string, limit?: number): IndexerEvent[];
 
-  /** Query events by event type, newest first. */
+  /**
+   * Query events by event type, newest first.
+   * Index-backed by `(type, id DESC)` — must not scan the full table.
+   */
   queryByType(type: string, limit?: number): IndexerEvent[];
 
-  /** Return up to `limit` most recent events across all contracts. */
+  /**
+   * Return up to `limit` most recent events across all contracts.
+   * Served by the primary key ordering (`id DESC`).
+   */
   getAllEvents(limit?: number): IndexerEvent[];
 
   /** Total number of events currently stored. */
@@ -57,6 +76,8 @@ export interface EventRepository {
 export interface CampaignRepository {
   /**
    * Return recent events for a specific campaign contract.
+   * Index-backed by `(contract_id, type, id DESC)` — must not scan the full
+   * table.
    * @param campaignId Soroban contract address of the campaign.
    * @param limit      Maximum number of events to return (default 100).
    */
@@ -73,6 +94,8 @@ export interface CampaignRepository {
 export interface ContributionRepository {
   /**
    * Return recent contribution events (type "Contribute") for a campaign.
+   * Index-backed by `(contract_id, type, id DESC)` — must not scan the full
+   * table.
    * @param campaignId  Soroban contract address of the campaign.
    * @param limit       Maximum number of events to return (default 100).
    */

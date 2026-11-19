@@ -47,6 +47,34 @@ CREATE TABLE IF NOT EXISTS indexer_state (
 INSERT INTO indexer_state (last_processed_ledger) VALUES (0) ON CONFLICT DO NOTHING;
 
 -- Create indexes
-CREATE INDEX idx_campaigns_user_id ON campaigns(user_id);
-CREATE INDEX idx_donations_campaign_id ON donations(campaign_id);
-CREATE INDEX idx_donations_user_id ON donations(user_id);
+--
+-- Query optimization notes (#1685)
+-- --------------------------------
+-- Profiling evidence (EXPLAIN ANALYZE on representative data):
+--   * Campaign detail page: donations filtered by campaign_id and ordered by
+--     created_at -> sequential scan + sort on donations.
+--   * Donation lookup by transaction_hash -> sequential scan on donations.
+--   * Campaign listing filtered by status and ordered by created_at ->
+--     sequential scan + sort on campaigns.
+--   * "My campaigns" page filtered by user_id and ordered by created_at ->
+--     sequential scan + sort on campaigns.
+-- The composite indexes below let Postgres satisfy the filter and the
+-- ordering from a single index, removing the explicit sort step.
+--
+-- All indexes use IF NOT EXISTS so this script remains idempotent.
+--
+-- Rollback:
+--   DROP INDEX IF EXISTS idx_campaigns_user_id;
+--   DROP INDEX IF EXISTS idx_campaigns_user_id_created_at;
+--   DROP INDEX IF EXISTS idx_campaigns_status_created_at;
+--   DROP INDEX IF EXISTS idx_donations_campaign_id;
+--   DROP INDEX IF EXISTS idx_donations_campaign_id_created_at;
+--   DROP INDEX IF EXISTS idx_donations_user_id;
+--   DROP INDEX IF EXISTS idx_donations_transaction_hash;
+CREATE INDEX IF NOT EXISTS idx_campaigns_user_id ON campaigns(user_id);
+CREATE INDEX IF NOT EXISTS idx_campaigns_user_id_created_at ON campaigns(user_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_campaigns_status_created_at ON campaigns(status, created_at);
+CREATE INDEX IF NOT EXISTS idx_donations_campaign_id ON donations(campaign_id);
+CREATE INDEX IF NOT EXISTS idx_donations_campaign_id_created_at ON donations(campaign_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_donations_user_id ON donations(user_id);
+CREATE INDEX IF NOT EXISTS idx_donations_transaction_hash ON donations(transaction_hash);

@@ -11,75 +11,130 @@ import { X, CheckCircle, AlertCircle, Info, AlertTriangle } from "lucide-react";
 
 export type ToastType = "success" | "error" | "info" | "warning";
 
-const TOAST_MAX = 5;
+export const TOAST_MAX = 5;
+export const TOAST_DEFAULT_DURATION = 5000;
 
 export interface Toast {
   id: string;
   message: string;
   type: ToastType;
   txHash?: string;
+  duration: number;
 }
 
-interface ToastContextType {
+export interface ToastOptions {
+  type?: ToastType;
+  txHash?: string;
+  /** Auto-dismiss duration in ms. Use 0 to disable auto-dismiss. */
+  duration?: number;
+}
+
+export interface ToastApi {
   toasts: Toast[];
-  addToast: (message: string, type: ToastType, txHash?: string) => void;
-  removeToast: (id: string) => void;
+  /** Show a toast. Accepts a message plus options, or a message and type. */
+  show: (
+    message: string,
+    typeOrOptions?: ToastType | ToastOptions,
+    txHash?: string,
+  ) => string;
+  /** Dismiss a toast by id. */
+  dismiss: (id: string) => void;
+  /** Dismiss all toasts. */
+  dismissAll: () => void;
 }
 
-const ToastContext = createContext<ToastContextType | null>(null);
+const ToastContext = createContext<ToastApi | null>(null);
+
+function resolveOptions(
+  typeOrOptions?: ToastType | ToastOptions,
+  txHash?: string,
+): Required<Pick<Toast, "type" | "duration">> & { txHash?: string } {
+  if (typeof typeOrOptions === "string") {
+    return {
+      type: typeOrOptions,
+      txHash,
+      duration:
+        typeOrOptions === "error" ? 0 : TOAST_DEFAULT_DURATION,
+    };
+  }
+  const type = typeOrOptions?.type ?? "info";
+  return {
+    type,
+    txHash: typeOrOptions?.txHash,
+    duration:
+      typeOrOptions?.duration ?? (type === "error" ? 0 : TOAST_DEFAULT_DURATION),
+  };
+}
 
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<Toast[]>([]);
 
-  const addToast = useCallback(
-    (message: string, type: ToastType, txHash?: string) => {
+  const dismiss = useCallback((id: string) => {
+    setToasts((prev) => prev.filter((t) => t.id !== id));
+  }, []);
+
+  const dismissAll = useCallback(() => {
+    setToasts([]);
+  }, []);
+
+  const show = useCallback(
+    (
+      message: string,
+      typeOrOptions?: ToastType | ToastOptions,
+      txHash?: string,
+    ) => {
+      const { type, txHash: resolvedTxHash, duration } = resolveOptions(
+        typeOrOptions,
+        txHash,
+      );
       const id = Math.random().toString(36).substring(2, 9);
       setToasts((prev) => {
-        const next = [...prev, { id, message, type, txHash }];
+        const next = [
+          ...prev,
+          { id, message, type, txHash: resolvedTxHash, duration },
+        ];
         return next.length > TOAST_MAX
           ? next.slice(next.length - TOAST_MAX)
           : next;
       });
 
-      // Auto-dismiss success/info/warning after 5 seconds
-      if (type !== "error") {
+      if (duration > 0) {
         setTimeout(() => {
           setToasts((prev) => prev.filter((t) => t.id !== id));
-        }, 5000);
+        }, duration);
       }
+
+      return id;
     },
     [],
   );
 
-  const removeToast = useCallback((id: string) => {
-    setToasts((prev) => prev.filter((t) => t.id !== id));
-  }, []);
-
   return (
-    <ToastContext.Provider value={{ toasts, addToast, removeToast }}>
+    <ToastContext.Provider value={{ toasts, show, dismiss, dismissAll }}>
       {children}
-      <ToastContainer toasts={toasts} removeToast={removeToast} />
+      <ToastContainer toasts={toasts} onDismiss={dismiss} />
     </ToastContext.Provider>
   );
 }
 
-const fallbackToast: ToastContextType = {
+const fallbackToast: ToastApi = {
   toasts: [],
-  addToast: () => {},
-  removeToast: () => {},
+  show: () => "",
+  dismiss: () => {},
+  dismissAll: () => {},
 };
 
-export function useToast() {
+export function useToast(): ToastApi {
   const ctx = useContext(ToastContext);
   return ctx || fallbackToast;
 }
 
-function ToastContainer({
+export function ToastContainer({
   toasts,
-  removeToast,
+  onDismiss,
 }: {
   toasts: Toast[];
-  removeToast: (id: string) => void;
+  onDismiss: (id: string) => void;
 }) {
   if (toasts.length === 0) return null;
 
@@ -94,12 +149,13 @@ function ToastContainer({
         <ToastItem
           key={toast.id}
           toast={toast}
-          onClose={() => removeToast(toast.id)}
+          onClose={() => onDismiss(toast.id)}
         />
       ))}
     </div>
   );
 }
+=======
 
 function ToastItem({ toast, onClose }: { toast: Toast; onClose: () => void }) {
   const icons = {

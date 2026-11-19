@@ -337,7 +337,16 @@ app.post("/alerts", async (req: Request, res: Response) => {
     });
 
     if (failedDeliveries.length > 0) {
-      console.error('[POST /alerts] Some notification deliveries failed:', failedDeliveries);
+      logger.error(
+        {
+          requestId: req.headers["x-request-id"],
+          failedDeliveries: failedDeliveries.map((r) => ({
+            ruleId: r.ruleId,
+            error: r.error instanceof Error ? r.error.message : r.error,
+          })),
+        },
+        "Some notification deliveries failed",
+      );
     }
 
     const alert = {

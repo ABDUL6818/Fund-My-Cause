@@ -32,13 +32,13 @@ export function CampaignHeaderTitle({
 }: CampaignHeaderTitleProps) {
   const Heading = `h${headingLevel}` as "h2" | "h3" | "h4";
   return (
-    <Heading className={className}>
+    <Heading className={cn("text-[var(--color-text-primary,#111827)]", className)}>
       {renderTitle ? renderTitle(title) : title}
     </Heading>
   );
 }
 
-export interface CampaignHeaderMetaProps {
+export interface CampaignCreatorInfoProps {
   /** Owning organisation or creator. */
   organization?: ReactNode;
   /** Short summary rendered under the organisation line. */
@@ -50,19 +50,41 @@ export interface CampaignHeaderMetaProps {
   };
 }
 
-export function CampaignHeaderMeta({
+/**
+ * Creator/organisation identity line plus optional summary.
+ *
+ * Presentational only: renders nothing when both `organization` and
+ * `description` are absent.
+ */
+export function CampaignCreatorInfo({
   organization,
   description,
   className,
   classNames,
-}: CampaignHeaderMetaProps) {
+}: CampaignCreatorInfoProps) {
   if (!organization && !description) return null;
   const content = (
     <>
       {organization && (
-        <p className={classNames?.organization}>{organization}</p>
+        <p
+          className={cn(
+            "text-[var(--color-text-secondary,#374151)]",
+            classNames?.organization,
+          )}
+        >
+          {organization}
+        </p>
       )}
-      {description && <p className={classNames?.description}>{description}</p>}
+      {description && (
+        <p
+          className={cn(
+            "text-[var(--color-text-secondary,#374151)]",
+            classNames?.description,
+          )}
+        >
+          {description}
+        </p>
+      )}
     </>
   );
 
@@ -70,6 +92,53 @@ export function CampaignHeaderMeta({
     return <div className={className}>{content}</div>;
   }
   return content;
+}
+
+/** @deprecated Use `CampaignCreatorInfo` instead. */
+export type CampaignHeaderMetaProps = CampaignCreatorInfoProps;
+
+/** @deprecated Use `CampaignCreatorInfo` instead. */
+export const CampaignHeaderMeta = CampaignCreatorInfo;
+
+export interface CampaignStatusBadgeProps {
+  /** Status label, e.g. "Active" or "Ended". */
+  status: ReactNode;
+  /** Optional tone used to colour the badge. */
+  tone?: "neutral" | "success" | "warning" | "danger";
+  className?: string;
+}
+
+const STATUS_BADGE_TONES: Record<
+  NonNullable<CampaignStatusBadgeProps["tone"]>,
+  string
+> = {
+  neutral: "bg-[var(--color-surface-elevated,#e5e7eb)] text-[var(--color-text,#111827)]",
+  success: "bg-green-100 text-green-800",
+  warning: "bg-amber-100 text-amber-800",
+  danger: "bg-red-100 text-red-800",
+};
+
+/**
+ * Small pill rendering a campaign status. Presentational only — callers pass
+ * the already-formatted label.
+ */
+export function CampaignStatusBadge({
+  status,
+  tone = "neutral",
+  className,
+}: CampaignStatusBadgeProps) {
+  if (status === null || status === undefined || status === "") return null;
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium",
+        STATUS_BADGE_TONES[tone],
+        className,
+      )}
+    >
+      {status}
+    </span>
+  );
 }
 
 export type CampaignHeaderActionsProps = CampaignActionsProps;
@@ -110,6 +179,10 @@ export interface CampaignHeaderProps {
   overlay?: ReactNode;
   /** Heading level for the title, so the card fits the page's outline. */
   headingLevel?: 2 | 3 | 4;
+  /** Optional status label rendered as a badge in the body. */
+  status?: ReactNode;
+  /** Tone applied to the status badge. */
+  statusTone?: CampaignStatusBadgeProps["tone"];
   /** Renders a skeleton in place of the media and text. */
   isLoading?: boolean;
   /** Replaces the media with an error message. */
@@ -148,6 +221,8 @@ export function CampaignHeader({
   renderTitle,
   overlay,
   headingLevel = 2,
+  status,
+  statusTone,
   isLoading = false,
   error = null,
   children,
@@ -175,7 +250,7 @@ export function CampaignHeader({
         ) : error ? (
           <div
             role="alert"
-            className="w-full h-full flex items-center justify-center text-sm text-red-500 bg-[var(--color-surface-elevated,#e5e7eb)]"
+            className="w-full h-full flex items-center justify-center text-sm text-[var(--color-danger-text,#b91c1c)] bg-[var(--color-surface-elevated,#e5e7eb)]"
           >
             {error}
           </div>
@@ -191,20 +266,25 @@ export function CampaignHeader({
             src={resolvedSrc}
             alt={alt}
             className={imageClass}
+            loading="lazy"
+            decoding="async"
             onError={() => setFailed(true)}
           />
         ) : null}
         {overlay}
       </div>
 
-      <div className={classNames?.body}>
+      <div className={cn("text-[var(--color-text-primary,#111827)]", classNames?.body)}>
         <CampaignHeaderTitle
           title={title}
           headingLevel={headingLevel}
           renderTitle={renderTitle}
           className={classNames?.title}
         />
-        <CampaignHeaderMeta
+        {status !== undefined && status !== null && status !== "" && (
+          <CampaignStatusBadge status={status} tone={statusTone} />
+        )}
+        <CampaignCreatorInfo
           organization={organization}
           description={description}
           classNames={{
@@ -219,5 +299,7 @@ export function CampaignHeader({
 }
 
 CampaignHeader.Title = CampaignHeaderTitle;
-CampaignHeader.Meta = CampaignHeaderMeta;
+CampaignHeader.Meta = CampaignCreatorInfo;
+CampaignHeader.CreatorInfo = CampaignCreatorInfo;
+CampaignHeader.StatusBadge = CampaignStatusBadge;
 CampaignHeader.Actions = CampaignHeaderActions;

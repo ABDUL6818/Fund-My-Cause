@@ -213,6 +213,218 @@ export interface CampaignInputToValidate {
 }
 
 /**
+ * Uniform error shape returned by every schema/validator.
+ * `fieldErrors` maps a field name to a human-readable message; `formErrors`
+ * holds errors that are not tied to a specific field.
+ */
+export interface ValidationErrorResult {
+  success: false;
+  fieldErrors: Record<string, string>;
+  formErrors: string[];
+}
+
+export interface ValidationSuccessResult<T> {
+  success: true;
+  data: T;
+}
+
+export type ValidationResult<T> = ValidationSuccessResult<T> | ValidationErrorResult;
+
+/**
+ * Minimal, dependency-free schema contract. A schema is a callable that
+ * validates unknown input and returns a uniform {@link ValidationResult}.
+ * This mirrors the ergonomics of zod's `safeParse` / Joi's `validate` so the
+ * same schema objects can be consumed by the GraphQL API and the frontend.
+ */
+export interface ValidationSchema<T> {
+  parse(input: unknown): ValidationResult<T>;
+  /** Throws a {@link ValidationError} when input is invalid. */
+  validate(input: unknown): T;
+}
+
+/** Error thrown by {@link ValidationSchema.validate} on invalid input. */
+export class ValidationError extends Error {
+  readonly fieldErrors: Record<string, string>;
+  readonly formErrors: string[];
+
+  constructor(result: ValidationErrorResult) {
+    const summary = Object.values(result.fieldErrors).join("; ");
+    super(summary || result.formErrors.join("; ") || "Validation failed.");
+    this.name = "ValidationError";
+    this.fieldErrors = result.fieldErrors;
+    this.formErrors = result.formErrors;
+  }
+}
+
+function success<T>(data: T): ValidationSuccessResult<T> {
+  return { success: true, data };
+}
+
+function failure(
+  fieldErrors: Record<string, string>,
+  formErrors: string[] = [],
+): ValidationErrorResult {
+  return { success: false, fieldErrors, formErrors };
+}
+
+function asString(value: unknown): string {
+  return typeof value === "string" ? value : value == null ? "" : String(value);
+}
+
+function asRecord(input: unknown): Record<string, unknown> {
+  return input && typeof input === "object" ? (input as Record<string, unknown>) : {};
+}
+
+/**
+ * Build a schema for a single string field validated by a field validator.
+ * The validator returns an error message or null.
+ */
+export function stringFieldSchema(
+  fieldName: string,
+  validator: (value: string) => string | null,
+): ValidationSchema<string> {
+  const run = (input: unknown): ValidationResult<string> => {
+    const value = asString(input);
+    const error = validator(value);
+    return error ? failure({ [fieldName]: error }) : success(value);
+  };
+  return {
+    parse: run,
+    validate(input: unknown): string {
+      const result = run(input);
+      if (!result.success) throw new ValidationError(result);
+      return result.data;
+    },
+  };
+}
+
+/**
+ * Build a schema for an object whose fields are each validated by a
+ * per-field schema. Field-level errors are collected into `fieldErrors`.
+ */
+export function objectSchema<T extends Record<string, unknown>>(
+  shape: { [K in keyof T]: ValidationSchema<T[K]> },
+): ValidationSchema<T> {
+  const run = (input: unknown): ValidationResult<T> => {
+    const record = asRecord(input);
+    const fieldErrors: Record<string, string> = {};
+    const data = {} as T;
+    for (const key of Object.keys(shape) as Array<keyof T>) {
+      const fieldResult = shape[key].parse(record[key as string]);
+      if (fieldResult.success) {
+        data[key] = fieldResult.data;
+      } else {
+        const message =
+          fieldResult.fieldErrors[String(key)] ??
+          fieldResult.formErrors[0] ??
+          "Invalid value.";
+        fieldErrors[String(key)] = message;
+      }
+    }
+    return Object.keys(fieldErrors).length > 0
+      ? failure(fieldErrors)
+      : success(data);
+  };
+  return {
+    parse: run,
+    validate(input: unknown): T {
+      const result = run(input);
+      if (!result.success) throw new ValidationError(result);
+      return result.data;
+    },
+  };
+}
+
+/** Schema for a campaign title. */
+export const campaignTitleSchema = stringFieldSchema("title", validateTitle);
+
+/** Schema for a campaign description. */
+export const campaignDescriptionSchema = stringFieldSchema(
+  "description",
+  validateDescription,
+);
+
+/** Schema for a campaign funding goal. */
+export const campaignGoalSchema = stringFieldSchema("goal", validateGoal);
+
+/** Schema for a campaign deadline. */
+export const campaignDeadlineSchema = stringFieldSchema(
+  "deadline",
+  validateDeadline,
+);
+
+/** Schema for a donation amount expressed in whole XLM. */
+export const donationAmountSchema = stringFieldSchema(
+  "amount",
+  validateDonationAmount,
+);
+
+/**
+ * Schema for a full campaign-creation input. Cross-field rules (e.g. minimum
+ * contribution must not exceed the goal) are applied after field validation.
+ */
+export const campaignInputSchema: ValidationSchema<CampaignInputToValidate> = (() => {
+  const base = objectSchema<CampaignInputToValidate>({
+    title: campaignTitleSchema,
+    description: campaignDescriptionSchema,
+    goal: campaignGoalSchema,
+    deadline: campaignDeadlineSchema,
+    minContribution: stringFieldSchema("minContribution", (value) =>
+      validateMinContribution(value, ""),
+    ),
+  });
+
+  const run = (input: unknown): ValidationResult<CampaignInputToValidate> => {
+    const record = asRecord(input);
+    const fieldErrors: Record<string, string> = {};
+
+    // Validate each field independently, then apply cross-field rules.
+    const titleError = validateTitle(asString(record.title));
+    if (titleError) fieldErrors.title = titleError;
+
+    const descriptionError = validateDescription(asString(record.description));
+    if (descriptionError) fieldErrors.description = descriptionError;
+
+    const goalError = validateGoal(asString(record.goal));
+    if (goalError) fieldErrors.goal = goalError;
+
+    const deadlineError = validateDeadline(asString(record.deadline));
+    if (deadlineError) fieldErrors.deadline = deadlineError;
+
+    const minContributionError = validateMinContribution(
+      asString(record.minContribution),
+      asString(record.goal),
+    );
+    if (minContributionError) fieldErrors.minContribution = minContributionError;
+
+    if (Object.keys(fieldErrors).length > 0) {
+      return failure(fieldErrors);
+    }
+
+    return success({
+      title: asString(record.title),
+      description: asString(record.description),
+      goal: asString(record.goal),
+      deadline: asString(record.deadline),
+      minContribution: asString(record.minContribution),
+    });
+  };
+
+  // Keep `base` referenced so the field schemas stay the single source of
+  // truth for individual validators; `run` adds cross-field checks.
+  void base;
+
+  return {
+    parse: run,
+    validate(input: unknown): CampaignInputToValidate {
+      const result = run(input);
+      if (!result.success) throw new ValidationError(result);
+      return result.data;
+    },
+  };
+})();
+
+/**
  * Validate a full campaign-creation input in one call.
  *
  * Runs the individual field validators (title, description, goal, deadline,

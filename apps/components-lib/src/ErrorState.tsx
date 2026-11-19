@@ -36,23 +36,21 @@ export function ErrorState({
     >
       {icon && (
         <div
-          className={cn("mb-4 text-red-400", iconClassName)}
+          className={cn("mb-4 text-error", iconClassName)}
           data-testid="error-state-icon"
         >
           {icon}
         </div>
       )}
       <div className={cn("space-y-2", contentClassName)}>
-        <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
-          {title}
-        </h3>
+        <h3 className="text-lg font-semibold text-foreground">{title}</h3>
         {description && (
-          <p className="text-sm text-gray-600 dark:text-gray-400">
-            {description}
-          </p>
+          <p className="text-sm text-muted-foreground">{description}</p>
         )}
         {error && (
-          <p className="text-sm text-red-500 dark:text-red-400 mt-3">{error}</p>
+          <p className="text-sm text-error mt-3" role="alert">
+            {error}
+          </p>
         )}
       </div>
       {actions && actions.length > 0 && (
@@ -60,12 +58,14 @@ export function ErrorState({
           {actions.map((action, idx) => (
             <button
               key={idx}
+              type="button"
               onClick={action.onClick}
               className={cn(
                 "px-4 py-2 rounded-lg text-sm font-medium transition",
+                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
                 action.variant === "secondary"
-                  ? "bg-gray-200 hover:bg-gray-300 text-gray-900 dark:bg-gray-700 dark:hover:bg-gray-600 dark:text-white"
-                  : "bg-red-600 hover:bg-red-700 text-white",
+                  ? "bg-muted hover:bg-muted/80 text-foreground"
+                  : "bg-error hover:bg-error/90 text-error-foreground",
               )}
               data-testid={`error-state-action-${idx}`}
             >

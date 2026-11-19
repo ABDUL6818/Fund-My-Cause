@@ -1,10 +1,11 @@
 import type { NextConfig } from "next";
 import createNextIntlPlugin from "next-intl/plugin";
+import { env } from "./src/env";
 
 const isDev = process.env.NODE_ENV === "development";
 
 // CDN origin for image delivery (optional — leave unset to serve from origin)
-const IMAGE_CDN_URL = process.env.NEXT_PUBLIC_IMAGE_CDN_URL ?? "";
+const IMAGE_CDN_URL = env.NEXT_PUBLIC_IMAGE_CDN_URL ?? "";
 
 /**
  * Content Security Policy for standard app routes.
@@ -87,6 +88,17 @@ const nextConfig: NextConfig = {
     "@fund-my-cause/types",
   ],
 
+  experimental: {
+    // Tree-shake heavy barrel-exported packages so only the icons/components
+    // actually used are pulled into the client bundle.
+    optimizePackageImports: [
+      "lucide-react",
+      "@radix-ui/react-icons",
+      "date-fns",
+      "recharts",
+    ],
+  },
+
   images: {
     // Serve AVIF first (best compression), fall back to WebP, then original.
     formats: ["image/avif", "image/webp"],
@@ -97,11 +109,20 @@ const nextConfig: NextConfig = {
     imageSizes: [16, 32, 48, 56, 64, 96, 128, 256],
     // Minimum cache TTL for optimised images — 30 days at the edge.
     minimumCacheTTL: 60 * 60 * 24 * 30,
+    // Allow SVG sources to be served through next/image (campaign logos).
+    dangerouslyAllowSVG: true,
+    contentDispositionType: "attachment",
+    contentSecurityPolicy: "default-src 'self'; script-src 'none'; sandbox;",
     remotePatterns: [
+      // Unsplash — campaign cover images.
       { protocol: "https", hostname: "images.unsplash.com" },
+      // IPFS gateways — campaign media stored on IPFS.
       { protocol: "https", hostname: "**.ipfs.io" },
       { protocol: "https", hostname: "ipfs.io" },
       { protocol: "https", hostname: "cloudflare-ipfs.com" },
+      { protocol: "https", hostname: "**.cloudflare-ipfs.com" },
+      { protocol: "https", hostname: "gateway.pinata.cloud" },
+      { protocol: "https", hostname: "**.mypinata.cloud" },
       // Allow the configured CDN origin so next/image can serve through it.
       ...(IMAGE_CDN_URL
         ? [

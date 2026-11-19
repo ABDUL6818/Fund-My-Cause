@@ -26,17 +26,17 @@ function ProgressBarComponent({
   const isFunded = isProgressFunded(clamped);
 
   const colorClasses = {
-    indigo: "bg-indigo-500",
-    green: "bg-green-500",
-    blue: "bg-blue-500",
-    red: "bg-red-500",
+    indigo: "bg-indigo-600",
+    green: "bg-green-600",
+    blue: "bg-blue-600",
+    red: "bg-red-600",
   };
 
   const labelColorClasses = {
-    indigo: "text-indigo-400",
-    green: "text-green-400",
-    blue: "text-blue-400",
-    red: "text-red-400",
+    indigo: "text-indigo-300",
+    green: "text-green-300",
+    blue: "text-blue-300",
+    red: "text-red-300",
   };
 
   return (
@@ -47,25 +47,26 @@ function ProgressBarComponent({
           aria-valuenow={Math.round(clamped)}
           aria-valuemin={0}
           aria-valuemax={100}
-          aria-label={`Progress: ${Math.round(clamped)}%`}
-          className="w-full bg-gray-800 rounded-full h-2 relative overflow-hidden"
+          aria-valuetext={`${Math.round(clamped)}%`}
+          aria-label="Progress"
+          className="w-full bg-gray-700 rounded-full h-2 relative overflow-hidden"
         >
           <div
             className={cn(
               "h-2 rounded-full transition-all duration-500",
-              isFunded ? "bg-green-500" : colorClasses[color],
+              isFunded ? "bg-green-600" : colorClasses[color],
               animated && "animate-shimmer",
             )}
             style={{ width: `${clamped}%` }}
           />
-          <div className="absolute right-0 top-0 h-full w-0.5 bg-gray-600 opacity-50" />
+          <div className="absolute right-0 top-0 h-full w-0.5 bg-gray-500 opacity-50" />
         </div>
       </div>
       {showLabel && (
         <span
           className={cn(
             "text-sm font-medium min-w-[3rem] text-right",
-            isFunded ? "text-green-400" : labelColorClasses[color],
+            isFunded ? "text-green-300" : labelColorClasses[color],
           )}
           aria-hidden="true"
         >

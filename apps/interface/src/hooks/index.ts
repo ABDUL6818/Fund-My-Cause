@@ -1,19 +1,19 @@
 // Custom hooks library
-export { useLocalStorage } from "./useLocalStorage";
-export { useDebounce } from "./useDebounce";
-export { useAsync } from "./useAsync";
-export type { AsyncStatus, AsyncState, UseAsyncReturn } from "./useAsync";
-export { useInfiniteList } from "./useInfiniteList";
+// Shared hooks now live in the shared package and are re-exported here to
+// keep the public hook surface stable for existing imports.
+export { useLocalStorage } from "@shared/hooks";
+export { useDebounce } from "@shared/hooks";
+export { useAsync } from "@shared/hooks";
+export type { AsyncStatus, AsyncState, UseAsyncReturn } from "@shared/hooks";
+export { useInfiniteList } from "@shared/hooks";
 export type {
   UseInfiniteListOptions,
   UseInfiniteListReturn,
   InfiniteListPage,
-} from "./useInfiniteList";
+} from "@shared/hooks";
 
-// Wallet hook + context — single source of wallet state for all components
+// Wallet hook — single source of wallet state for all components
 export { useWallet } from "./useWallet";
-export { WalletProvider, WalletContext } from "./useWallet";
-export type { WalletContextValue, WalletProviderProps } from "./useWallet";
 
 // Domain hooks
 export {
@@ -34,18 +34,18 @@ export {
   useRecommendedCampaigns,
 } from "./useRecommendations";
 export { useComments } from "./useComments";
-export { useBreakpoint } from "./useBreakpoint";
-export { useFocusTrap } from "./useFocusTrap";
+export { useBreakpoint } from "@shared/hooks";
+export { useFocusTrap } from "@shared/hooks";
 export { useSearchSuggestions } from "./useSearchSuggestions";
 export type { SearchSuggestion } from "./useSearchSuggestions";
-export { useBackButton } from "./useBackButton";
+export { useBackButton } from "@shared/hooks";
 export type {
   UseBackButtonOptions,
   UseBackButtonReturn,
-} from "./useBackButton";
+} from "@shared/hooks";
 
 // PWA hooks
-export { useInstallPrompt } from "./useInstallPrompt";
+export { useInstallPrompt } from "@shared/hooks";
 
 // Store slice hooks (scoped selectors — prefer these over direct store imports)
 export {
