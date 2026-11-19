@@ -76,12 +76,7 @@ export function useCampaignDraft(
   // Check for existing draft on mount and listen for external changes
   useEffect(() => {
     const checkDraft = () => {
-      try {
-        const raw = localStorage.getItem(DRAFT_KEY);
-        setHasDraft(raw !== null);
-      } catch {
-        setHasDraft(false);
-      }
+      setHasDraft(readJsonStorage<CampaignDraftData>(DRAFT_KEY) !== null);
     };
 
     checkDraft();
@@ -108,7 +103,7 @@ export function useCampaignDraft(
       setSaveStatus(DraftSaveStatus.Saving);
       isSavingRef.current = true;
       try {
-        localStorage.setItem(DRAFT_KEY, JSON.stringify(data));
+        writeJsonStorage(DRAFT_KEY, data);
         setHasDraft(true);
         setLastSaved(new Date());
         setSaveStatus(DraftSaveStatus.Saved);
@@ -122,13 +117,7 @@ export function useCampaignDraft(
   );
 
   const loadDraft = useCallback((): CampaignDraftData | null => {
-    try {
-      const raw = localStorage.getItem(DRAFT_KEY);
-      if (!raw) return null;
-      return JSON.parse(raw) as CampaignDraftData;
-    } catch {
-      return null;
-    }
+    return readJsonStorage<CampaignDraftData>(DRAFT_KEY);
   }, []);
 
   const clearDraft = useCallback(() => {

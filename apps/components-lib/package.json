@@ -81,11 +81,10 @@
     "storybook:build": "storybook build"
   },
   "dependencies": {
-    "clsx": "2.1.1",
+    "@fund-my-cause/shared-utils": "workspace:*",
     "lucide-react": "0.577.0",
     "react": "19.2.3",
-    "react-dom": "19.2.3",
-    "tailwind-merge": "3.5.0"
+    "react-dom": "19.2.3"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.4",
@@ -96,8 +95,10 @@
     "@types/react-dom": "19.2.3",
     "@typescript-eslint/eslint-plugin": "^8.0.0",
     "@typescript-eslint/parser": "^8.0.0",
+    "axe-core": "4.10.2",
     "eslint": "9.39.4",
     "eslint-plugin-react-hooks": "^5.2.0",
+    "jest-axe": "9.0.0",
     "typescript": "5.9.3",
     "vitest": "4.1.2"
   }

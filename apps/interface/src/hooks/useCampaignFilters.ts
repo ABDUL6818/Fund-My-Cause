@@ -74,16 +74,8 @@ export function useCampaignFilters(): UseCampaignFiltersReturn {
 
   const setParam = React.useCallback(
     (key: string, value: string) => {
-      const params = new URLSearchParams(searchParams.toString());
-      if (value === "") {
-        params.delete(key);
-      } else if (key === "filter" && value === "all") {
-        params.delete(key);
-      } else if (key === "sort" && value === "recent") {
-        params.delete(key);
-      } else {
-        params.set(key, value);
-      }
+      const params = buildSearchParams(searchParams.toString());
+      applyDefaultParamRemoval(params, key, value);
       if (key !== "page") params.delete("page");
       router.replace(`/campaigns?${params.toString()}`, { scroll: false });
     },
@@ -112,7 +104,7 @@ export function useCampaignFilters(): UseCampaignFiltersReturn {
     setGoalMax("");
     setDateFrom("");
     setDateTo("");
-    const params = new URLSearchParams(searchParams.toString());
+    const params = buildSearchParams(searchParams.toString());
     ["goalMin", "goalMax", "dateFrom", "dateTo"].forEach((k) =>
       params.delete(k),
     );

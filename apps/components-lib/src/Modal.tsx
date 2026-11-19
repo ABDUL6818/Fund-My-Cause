@@ -44,13 +44,14 @@ export function Modal({
 
   useEffect(() => {
     if (!isOpen) return;
+    const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     return () => {
-      document.body.style.overflow = "unset";
+      document.body.style.overflow = previousOverflow;
     };
   }, [isOpen]);
 
-  // Focus trap
+  // Focus trap + focus restoration
   useEffect(() => {
     if (!isOpen || !containerRef.current) return;
     const container = containerRef.current;
@@ -63,6 +64,7 @@ export function Modal({
 
     const handleKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
+        e.stopPropagation();
         onClose();
         return;
       }
@@ -140,8 +142,9 @@ export function Modal({
             </h2>
           )}
           <button
+            type="button"
             onClick={onClose}
-            className="ml-auto p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors text-gray-500 dark:text-gray-400"
+            className="ml-auto p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors text-gray-500 dark:text-gray-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-gray-800"
             aria-label="Close modal"
           >
             <X className="w-5 h-5" aria-hidden="true" />

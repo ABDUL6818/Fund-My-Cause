@@ -19,6 +19,62 @@ function ModalItem({
 }) {
   const isTop = index === total - 1;
   const offset = (total - 1 - index) * 8;
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const previouslyFocusedRef = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    if (!isTop) return;
+
+    previouslyFocusedRef.current =
+      document.activeElement instanceof HTMLElement
+        ? document.activeElement
+        : null;
+
+    const dialog = dialogRef.current;
+    const focusable = getFocusableElements(dialog);
+    (focusable[0] ?? dialog)?.focus();
+
+    return () => {
+      const previous = previouslyFocusedRef.current;
+      if (previous && document.contains(previous)) {
+        previous.focus();
+      }
+    };
+  }, [isTop]);
+
+  const handleKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (!isTop) return;
+
+    if (event.key === "Escape") {
+      event.stopPropagation();
+      onClose();
+      return;
+    }
+
+    if (event.key !== "Tab") return;
+
+    const dialog = dialogRef.current;
+    const focusable = getFocusableElements(dialog);
+    if (focusable.length === 0) {
+      event.preventDefault();
+      dialog?.focus();
+      return;
+    }
+
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    const active = document.activeElement;
+
+    if (event.shiftKey) {
+      if (active === first || !dialog?.contains(active)) {
+        event.preventDefault();
+        last.focus();
+      }
+    } else if (active === last || !dialog?.contains(active)) {
+      event.preventDefault();
+      first.focus();
+    }
+  };
 
   return (
     <div

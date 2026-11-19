@@ -4,6 +4,7 @@ import {
   getCampaignDetailData,
   type CampaignDetailViewData,
 } from "@/lib/campaignDetail";
+import { campaignQueryKeys } from "@packages/shared-utils";
 
 export interface UseCampaignDetailOptions {
   initialData?: CampaignDetailViewData;

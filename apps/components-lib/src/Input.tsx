@@ -76,6 +76,11 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
           {...control}
           className={cn(
             controlClassName({ unstyled, hasError: Boolean(error), fullWidth }),
+            // Shared focus-ring token: visible ring on keyboard focus only,
+            // offset so it stays legible against adjacent controls.
+            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+            // Contrast-safe placeholder and disabled states (WCAG AA).
+            "placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-60",
             className,
           )}
           {...props}

@@ -32,7 +32,7 @@ export function CampaignHeaderTitle({
 }: CampaignHeaderTitleProps) {
   const Heading = `h${headingLevel}` as "h2" | "h3" | "h4";
   return (
-    <Heading className={className}>
+    <Heading className={cn("text-[var(--color-text-primary,#111827)]", className)}>
       {renderTitle ? renderTitle(title) : title}
     </Heading>
   );
@@ -66,9 +66,25 @@ export function CampaignCreatorInfo({
   const content = (
     <>
       {organization && (
-        <p className={classNames?.organization}>{organization}</p>
+        <p
+          className={cn(
+            "text-[var(--color-text-secondary,#374151)]",
+            classNames?.organization,
+          )}
+        >
+          {organization}
+        </p>
       )}
-      {description && <p className={classNames?.description}>{description}</p>}
+      {description && (
+        <p
+          className={cn(
+            "text-[var(--color-text-secondary,#374151)]",
+            classNames?.description,
+          )}
+        >
+          {description}
+        </p>
+      )}
     </>
   );
 
@@ -234,7 +250,7 @@ export function CampaignHeader({
         ) : error ? (
           <div
             role="alert"
-            className="w-full h-full flex items-center justify-center text-sm text-red-500 bg-[var(--color-surface-elevated,#e5e7eb)]"
+            className="w-full h-full flex items-center justify-center text-sm text-[var(--color-danger-text,#b91c1c)] bg-[var(--color-surface-elevated,#e5e7eb)]"
           >
             {error}
           </div>
@@ -258,7 +274,7 @@ export function CampaignHeader({
         {overlay}
       </div>
 
-      <div className={classNames?.body}>
+      <div className={cn("text-[var(--color-text-primary,#111827)]", classNames?.body)}>
         <CampaignHeaderTitle
           title={title}
           headingLevel={headingLevel}

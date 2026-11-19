@@ -1,3 +1,4 @@
+import { fileURLToPath } from "node:url";
 import { defineConfig } from "vitest/config";
 
 /**
@@ -12,6 +13,13 @@ import { defineConfig } from "vitest/config";
  * patterns are needed here.
  */
 export default defineConfig({
+  resolve: {
+    alias: {
+      "@design-tokens": fileURLToPath(
+        new URL("../interface/src/styles/design-tokens.ts", import.meta.url),
+      ),
+    },
+  },
   test: {
     environment: "jsdom",
     globals: true,

@@ -39,6 +39,11 @@ export function WalletSelectModalHost() {
     [connectWithAction, addToast],
   );
 
+  const handleClose = useCallback(
+    () => setShowWalletSelect(false),
+    [setShowWalletSelect],
+  );
+
   if (!showWalletSelect) return null;
 
   return (

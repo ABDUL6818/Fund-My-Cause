@@ -286,7 +286,11 @@ export function CampaignActions({
     return (
       <p
         role="alert"
-        className={cn("text-sm text-red-500", classNames?.root, className)}
+        className={cn(
+          "text-sm text-[var(--color-danger-text)]",
+          classNames?.root,
+          className,
+        )}
       >
         {error}
       </p>

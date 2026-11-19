@@ -2,6 +2,7 @@
 
 import React, { HTMLAttributes, ReactNode } from "react";
 import { cn } from "./lib/utils";
+import { tokens } from "./lib/tokens";
 
 /** Visual presentation variant for the Card component. */
 export type CardVariant = "default" | "compact" | "highlighted";
@@ -28,9 +29,9 @@ export interface CardProps extends HTMLAttributes<HTMLDivElement> {
 }
 
 const VARIANT_CLASSES: Record<CardVariant, string> = {
-  default: "bg-white border border-gray-200 shadow-sm p-4",
-  compact: "bg-white border border-gray-200 shadow-sm p-3",
-  highlighted: "bg-indigo-50 border-2 border-indigo-400 shadow-md p-4",
+  default: `${tokens.surface.default} ${tokens.border.default} ${tokens.text.primary} shadow-sm p-4`,
+  compact: `${tokens.surface.default} ${tokens.border.default} ${tokens.text.primary} shadow-sm p-3`,
+  highlighted: `${tokens.surface.accent} ${tokens.border.accentStrong} ${tokens.text.primary} shadow-md p-4`,
 };
 
 /**
@@ -72,7 +73,8 @@ function CardComponent({
       className={cn(
         "rounded-lg",
         baseClasses,
-        hoverable && "hover:shadow-md transition-shadow cursor-pointer",
+        hoverable &&
+          "hover:shadow-md transition-shadow cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-indigo-600",
         className,
       )}
       {...props}
@@ -92,7 +94,7 @@ function CardHeaderComponent({
 }: HTMLAttributes<HTMLDivElement>) {
   return (
     <div
-      className={cn("mb-4 pb-4 border-b border-gray-200", className)}
+      className={cn("mb-4 pb-4 border-b", tokens.border.default, className)}
       {...props}
     >
       {children}
@@ -125,7 +127,7 @@ function CardFooterComponent({
 }: HTMLAttributes<HTMLDivElement>) {
   return (
     <div
-      className={cn("mt-4 pt-4 border-t border-gray-200", className)}
+      className={cn("mt-4 pt-4 border-t", tokens.border.default, className)}
       {...props}
     >
       {children}
