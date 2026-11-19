@@ -35,80 +35,24 @@ Usage example
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Optional
+# Re-export the shared central error classes and factory helpers so existing
+# imports (``from error_schema import bad_request``) keep working unchanged.
+from shared.error_schema import (  # noqa: F401
+    ErrorCode,
+    ErrorDetail,
+    ErrorEnvelope,
+    bad_request,
+    internal_error,
+    not_found,
+    service_unavailable,
+)
 
-from fastapi.responses import JSONResponse
-
-
-# ---------------------------------------------------------------------------
-# Canonical error codes
-# ---------------------------------------------------------------------------
-
-class ErrorCode:
-    BAD_REQUEST: str = "BAD_REQUEST"
-    NOT_FOUND: str = "NOT_FOUND"
-    INTERNAL_ERROR: str = "INTERNAL_ERROR"
-    SERVICE_UNAVAILABLE: str = "SERVICE_UNAVAILABLE"
-
-
-# ---------------------------------------------------------------------------
-# Envelope dataclass
-# ---------------------------------------------------------------------------
-
-@dataclass
-class ErrorDetail:
-    code: str
-    message: str
-    detail: Optional[str] = None
-
-
-@dataclass
-class ErrorEnvelope:
-    error: ErrorDetail
-
-    def to_dict(self) -> dict:
-        result: dict = {
-            "error": {
-                "code": self.error.code,
-                "message": self.error.message,
-            }
-        }
-        if self.error.detail is not None:
-            result["error"]["detail"] = self.error.detail
-        return result
-
-
-# ---------------------------------------------------------------------------
-# Factory helpers — use these everywhere instead of bare JSONResponse(…)
-# ---------------------------------------------------------------------------
-
-def _make_response(
-    http_status: int,
-    code: str,
-    message: str,
-    detail: Optional[str] = None,
-) -> JSONResponse:
-    """Build a ``JSONResponse`` whose body conforms to the error envelope schema."""
-    envelope = ErrorEnvelope(error=ErrorDetail(code=code, message=message, detail=detail))
-    return JSONResponse(status_code=http_status, content=envelope.to_dict())
-
-
-def bad_request(message: str, detail: Optional[str] = None) -> JSONResponse:
-    """HTTP 400 — malformed input."""
-    return _make_response(400, ErrorCode.BAD_REQUEST, message, detail)
-
-
-def not_found(message: str, detail: Optional[str] = None) -> JSONResponse:
-    """HTTP 404 — resource not found."""
-    return _make_response(404, ErrorCode.NOT_FOUND, message, detail)
-
-
-def internal_error(message: str = "An unexpected error occurred", detail: Optional[str] = None) -> JSONResponse:
-    """HTTP 500 — unexpected server failure."""
-    return _make_response(500, ErrorCode.INTERNAL_ERROR, message, detail)
-
-
-def service_unavailable(message: str, detail: Optional[str] = None) -> JSONResponse:
-    """HTTP 503 — upstream dependency unavailable."""
-    return _make_response(503, ErrorCode.SERVICE_UNAVAILABLE, message, detail)
+__all__ = [
+    "ErrorCode",
+    "ErrorDetail",
+    "ErrorEnvelope",
+    "bad_request",
+    "not_found",
+    "internal_error",
+    "service_unavailable",
+]

@@ -1,11 +1,6 @@
 import { GraphQLError } from "graphql";
-import type { IResolvers } from "@graphql-tools/utils";
-import {
-  validateCampaignInput,
-  validateDonationAmount,
-  XLM_TO_STROOPS,
-} from "@fund-my-cause/types";
-import type { Context } from "../types.js";
+import { z } from "zod";
+import { XLM_TO_STROOPS } from "@fund-my-cause/types";
 
 /**
  * Standardized validation error structure
@@ -17,82 +12,177 @@ export interface ValidationErrorResult {
 }
 
 /**
- * Validates campaign creation input
- * @throws GraphQLError with standardized validation errors
+ * Uniform HTTP-400-style error code used across all validation failures.
  */
-export function validateCreateCampaignInput(input: any): void {
-  const validationErrors = validateCampaignInput({
-    title: input.title,
-    description: input.description,
-    goal: input.goal?.toString() ?? "",
-    deadline: input.deadline,
-    minContribution: input.minContribution?.toString() ?? "",
-  });
+export const VALIDATION_ERROR_CODE = "BAD_USER_INPUT";
 
-  if (Object.keys(validationErrors).length > 0) {
-    throw new GraphQLError("Invalid campaign input", {
+/**
+ * Flattens a ZodError into a `{ field: message }` map for uniform responses.
+ */
+export function formatZodErrors(error: z.ZodError): Record<string, string> {
+  const validationErrors: Record<string, string> = {};
+  for (const issue of error.issues) {
+    const path = issue.path.length > 0 ? issue.path.join(".") : "_root";
+    if (!(path in validationErrors)) {
+      validationErrors[path] = issue.message;
+    }
+  }
+  return validationErrors;
+}
+
+/**
+ * Runs a schema against input and throws a uniform GraphQLError on failure.
+ * Returns the parsed (and coerced) value on success.
+ */
+export function parseWithSchema<T>(
+  schema: z.ZodType<T>,
+  input: unknown,
+  message: string,
+): T {
+  const result = schema.safeParse(input ?? {});
+  if (!result.success) {
+    throw new GraphQLError(message, {
       extensions: {
-        code: "BAD_USER_INPUT",
-        validationErrors,
+        code: VALIDATION_ERROR_CODE,
+        validationErrors: formatZodErrors(result.error),
       },
     });
   }
+  return result.data;
+}
+
+const nonEmptyString = (field: string) =>
+  z
+    .string({ required_error: `${field} is required` })
+    .trim()
+    .min(1, `${field} is required`);
+
+const optionalUrl = (field: string) =>
+  z
+    .string()
+    .trim()
+    .optional()
+    .refine((value) => !value || isValidUrl(value), {
+      message: `Invalid ${field}`,
+    });
+
+function isValidUrl(value: string): boolean {
+  try {
+    new URL(value);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Schema for `createCampaign` resolver input.
+ */
+export const createCampaignSchema = z.object({
+  title: nonEmptyString("Title").max(
+    100,
+    "Title must be 100 characters or less",
+  ),
+  description: z
+    .string()
+    .max(1000, "Description must be 1000 characters or less")
+    .optional(),
+  goal: z
+    .union([z.string(), z.number()])
+    .refine((value) => value !== "" && Number(value) > 0, {
+      message: "Goal must be a positive number",
+    }),
+  deadline: z
+    .union([z.string(), z.number(), z.date()])
+    .refine((value) => !Number.isNaN(new Date(value).getTime()), {
+      message: "Deadline must be a valid date",
+    }),
+  minContribution: z
+    .union([z.string(), z.number()])
+    .optional()
+    .refine((value) => value === undefined || value === "" || Number(value) >= 0, {
+      message: "Minimum contribution must be a non-negative number",
+    }),
+});
+
+/**
+ * Schema for `recordContribution` resolver input.
+ */
+export const recordContributionSchema = z.object({
+  campaignId: nonEmptyString("Campaign ID"),
+  contributor: nonEmptyString("Contributor address"),
+  amount: z
+    .union([z.string(), z.number()])
+    .refine((value) => value !== "" && Number(value) > 0, {
+      message: "Contribution amount must be a positive number",
+    }),
+  transactionHash: nonEmptyString("Transaction hash"),
+});
+
+/**
+ * Schema for `updateCampaign` resolver input.
+ */
+export const updateCampaignSchema = z.object({
+  title: z
+    .string()
+    .trim()
+    .min(1, "Title cannot be empty")
+    .max(100, "Title must be 100 characters or less")
+    .optional(),
+  description: z
+    .string()
+    .max(1000, "Description must be 1000 characters or less")
+    .optional(),
+  image: optionalUrl("image URL"),
+  videoUrl: z
+    .string()
+    .trim()
+    .optional()
+    .refine((value) => !value || /^https:\/\//i.test(value), {
+      message: "Video URL must start with https://",
+    })
+    .refine((value) => !value || isValidUrl(value), {
+      message: "Invalid video URL",
+    }),
+});
+
+/**
+ * Schema for `authenticate` resolver input.
+ */
+export const authenticateSchema = z.object({
+  signature: nonEmptyString("Signature"),
+  message: nonEmptyString("Message"),
+  address: nonEmptyString("Address"),
+});
+
+/**
+ * Validates campaign creation input
+ * @throws GraphQLError with standardized validation errors
+ */
+export function validateCreateCampaignInput(input: unknown): void {
+  parseWithSchema(createCampaignSchema, input, "Invalid campaign input");
 }
 
 /**
  * Validates contribution amount input
  * @throws GraphQLError if validation fails
  */
-export function validateRecordContributionInput(input: any): void {
-  // Validate required fields
-  if (!input.campaignId) {
-    throw new GraphQLError("Campaign ID is required", {
-      extensions: {
-        code: "BAD_USER_INPUT",
-        validationErrors: { campaignId: "Campaign ID is required" },
-      },
-    });
-  }
+export function validateRecordContributionInput(input: unknown): void {
+  const parsed = parseWithSchema(
+    recordContributionSchema,
+    input,
+    "Invalid contribution input",
+  );
 
-  if (!input.contributor) {
-    throw new GraphQLError("Contributor address is required", {
+  // Validate the stroops amount against the shared donation rules.
+  const amountXlm = Number(parsed.amount) / Number(XLM_TO_STROOPS);
+  if (!Number.isFinite(amountXlm) || amountXlm <= 0) {
+    throw new GraphQLError("Invalid contribution amount", {
       extensions: {
-        code: "BAD_USER_INPUT",
-        validationErrors: { contributor: "Contributor address is required" },
-      },
-    });
-  }
-
-  if (!input.amount) {
-    throw new GraphQLError("Contribution amount is required", {
-      extensions: {
-        code: "BAD_USER_INPUT",
-        validationErrors: { amount: "Contribution amount is required" },
-      },
-    });
-  }
-
-  if (!input.transactionHash) {
-    throw new GraphQLError("Transaction hash is required", {
-      extensions: {
-        code: "BAD_USER_INPUT",
+        code: VALIDATION_ERROR_CODE,
         validationErrors: {
-          transactionHash: "Transaction hash is required",
+          amount: "Contribution amount must be a positive number",
         },
-      },
-    });
-  }
-
-  // Validate amount using the shared validation function
-  const amountXlm = input.amount
-    ? (Number(input.amount) / Number(XLM_TO_STROOPS)).toString()
-    : "0";
-  const amountError = validateDonationAmount(amountXlm);
-  if (amountError) {
-    throw new GraphQLError(amountError, {
-      extensions: {
-        code: "BAD_USER_INPUT",
-        validationErrors: { amount: amountError },
       },
     });
   }
@@ -102,83 +192,18 @@ export function validateRecordContributionInput(input: any): void {
  * Validates update campaign input
  * @throws GraphQLError with standardized validation errors
  */
-export function validateUpdateCampaignInput(input: any): void {
-  const validationErrors: Record<string, string> = {};
-
-  // Title is optional, but validate if provided
-  if (input.title !== undefined) {
-    if (!input.title || input.title.trim() === "") {
-      validationErrors.title = "Title cannot be empty";
-    } else if (input.title.length > 100) {
-      validationErrors.title = "Title must be 100 characters or less";
-    }
-  }
-
-  // Description is optional, but validate if provided
-  if (input.description !== undefined) {
-    if (input.description && input.description.length > 1000) {
-      validationErrors.description =
-        "Description must be 1000 characters or less";
-    }
-  }
-
-  // Image URL validation if provided
-  if (input.image !== undefined && input.image) {
-    try {
-      new URL(input.image);
-    } catch {
-      validationErrors.image = "Invalid image URL";
-    }
-  }
-
-  // Video URL validation if provided
-  if (input.videoUrl !== undefined && input.videoUrl) {
-    if (!/^https:\/\//i.test(input.videoUrl.trim())) {
-      validationErrors.videoUrl = "Video URL must start with https://";
-    } else {
-      try {
-        new URL(input.videoUrl);
-      } catch {
-        validationErrors.videoUrl = "Invalid video URL";
-      }
-    }
-  }
-
-  if (Object.keys(validationErrors).length > 0) {
-    throw new GraphQLError("Invalid campaign update input", {
-      extensions: {
-        code: "BAD_USER_INPUT",
-        validationErrors,
-      },
-    });
-  }
+export function validateUpdateCampaignInput(input: unknown): void {
+  parseWithSchema(
+    updateCampaignSchema,
+    input,
+    "Invalid campaign update input",
+  );
 }
 
 /**
  * Validates authenticate input
  * @throws GraphQLError with standardized validation errors
  */
-export function validateAuthenticateInput(input: any): void {
-  const validationErrors: Record<string, string> = {};
-
-  if (!input.signature || input.signature.trim() === "") {
-    validationErrors.signature = "Signature is required";
-  }
-
-  if (!input.message || input.message.trim() === "") {
-    validationErrors.message = "Message is required";
-  }
-
-  if (!input.address || input.address.trim() === "") {
-    validationErrors.address = "Address is required";
-  }
-
-  if (Object.keys(validationErrors).length > 0) {
-    throw new GraphQLError("Invalid authentication input", {
-      extensions: {
-        code: "BAD_USER_INPUT",
-        validationErrors,
-      },
-    });
-  }
+export function validateAuthenticateInput(input: unknown): void {
+  parseWithSchema(authenticateSchema, input, "Invalid authentication input");
 }

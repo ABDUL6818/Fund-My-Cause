@@ -8,6 +8,11 @@ import {
 } from "@fund-my-cause/shared-utils";
 import { decodeCursor, CursorError, buildPage } from "./cursor.js";
 import { enforceMutationRateLimit } from "./shared.js";
+import { validateInput } from "../validation/index.js";
+import {
+  createCampaignSchema,
+  updateCampaignSchema,
+} from "../validation/campaign.js";
 import {
   CACHE_TTL,
   CacheKeys,
@@ -155,11 +160,11 @@ export const campaignResolvers: IResolvers<any, Context> = {
       if (!context.user) {
         throw new GraphQLError("Authentication required");
       }
-      validateCreateCampaignInput(input);
+      const validatedInput = validateInput(createCampaignSchema, input);
       await enforceMutationRateLimit("createCampaign", context);
       const campaign = await context.contractService.createCampaign(
         context.user,
-        input,
+        validatedInput,
       );
       await invalidateCampaignCaches(context.cache);
       return campaign;
@@ -169,11 +174,11 @@ export const campaignResolvers: IResolvers<any, Context> = {
       if (!context.user) {
         throw new GraphQLError("Authentication required");
       }
-      validateUpdateCampaignInput(input);
+      const validatedInput = validateInput(updateCampaignSchema, input);
       const campaign = await context.contractService.updateCampaign(
         id,
         context.user,
-        input,
+        validatedInput,
       );
       await invalidateCampaignCaches(context.cache, { campaignId: id });
       await context.pubsub.publish(`campaign_updated:${id}`, campaign);
@@ -181,45 +186,3 @@ export const campaignResolvers: IResolvers<any, Context> = {
     },
   },
 };
-
-// ── Input validators (moved intact from the original file) ──────────────────
-function validateCreateCampaignInput(input: any): void {
-  if (!input?.title || typeof input.title !== "string") {
-    throw new GraphQLError("title is required", {
-      extensions: { code: "BAD_USER_INPUT" },
-    });
-  }
-  if (!input?.description || typeof input.description !== "string") {
-    throw new GraphQLError("description is required", {
-      extensions: { code: "BAD_USER_INPUT" },
-    });
-  }
-  if (input.goal == null) {
-    throw new GraphQLError("goal is required", {
-      extensions: { code: "BAD_USER_INPUT" },
-    });
-  }
-  if (!input?.deadline || typeof input.deadline !== "string") {
-    throw new GraphQLError("deadline is required", {
-      extensions: { code: "BAD_USER_INPUT" },
-    });
-  }
-  if (!input?.category || typeof input.category !== "string") {
-    throw new GraphQLError("category is required", {
-      extensions: { code: "BAD_USER_INPUT" },
-    });
-  }
-  if (input.minContribution == null) {
-    throw new GraphQLError("minContribution is required", {
-      extensions: { code: "BAD_USER_INPUT" },
-    });
-  }
-}
-
-function validateUpdateCampaignInput(input: any): void {
-  if (!input || typeof input !== "object") {
-    throw new GraphQLError("input is required", {
-      extensions: { code: "BAD_USER_INPUT" },
-    });
-  }
-}

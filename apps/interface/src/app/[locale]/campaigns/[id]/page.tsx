@@ -16,6 +16,7 @@ import { CampaignDetailStats } from "@/components/campaign/CampaignDetailStats";
 import { CampaignDetailSocialLinks } from "@/components/campaign/CampaignDetailSocialLinks";
 import { CampaignActions } from "./CampaignActions";
 import { CampaignDetailContent } from "./CampaignDetailContent";
+import { CampaignProvider } from "@/contexts/CampaignContext";
 
 // ── Static Generation (SSG + ISR) ─────────────────────────────────────────────
 
@@ -87,54 +88,30 @@ export default async function CampaignDetailPage({
     notFound();
   }
 
-  const { campaign, xlmPrice, progress, deadlinePassed, goalMet } = data;
-
   return (
-    <main className="min-h-screen bg-gray-50 text-gray-900 dark:bg-gray-950 dark:text-white">
-      <Navbar />
+    <CampaignProvider campaignId={id} initialData={data}>
+      <main className="min-h-screen bg-gray-50 text-gray-900 dark:bg-gray-950 dark:text-white">
+        <Navbar />
 
-      <CampaignDetailHero title={campaign.title} />
+        <CampaignDetailHero />
 
-      <div className="mx-auto max-w-3xl space-y-8 px-6 py-10">
-        <CampaignDetailHeader
-          title={campaign.title}
-          creator={campaign.creator}
-        />
+        <div className="mx-auto max-w-3xl space-y-8 px-6 py-10">
+          <CampaignDetailHeader />
 
-        <CampaignDetailProgress
-          progress={progress}
-          raised={campaign.raised}
-          goal={campaign.goal}
-          xlmPrice={xlmPrice}
-        />
+          <CampaignDetailProgress />
 
-        <CampaignDetailStats
-          contributorCount={campaign.contributorCount}
-          averageContribution={campaign.averageContribution}
-          deadline={campaign.deadline}
-          xlmPrice={xlmPrice}
-        />
+          <CampaignDetailStats />
 
-        <p className="leading-relaxed text-gray-700 dark:text-gray-300">
-          {campaign.description}
-        </p>
+          <CampaignDetailSocialLinks />
 
-        <ShareTrigger campaignId={id} campaignTitle={campaign.title} />
-        <TransactionHistory contractId={id} campaignTitle={campaign.title} />
-        <ShareButton campaignId={id} campaignTitle={campaign.title} />
+          <ShareTrigger />
+          <TransactionHistory />
+          <ShareButton />
 
-        <CampaignDetailSocialLinks links={campaign.socialLinks} />
-
-        <CampaignActions
-          contractId={id}
-          creator={campaign.creator}
-          deadlinePassed={deadlinePassed}
-          goalMet={goalMet}
-          campaignTitle={campaign.title}
-          status={campaign.status}
-        />
-      </div>
-      <CampaignDetailContent contractId={id} />
-    </main>
+          <CampaignActions />
+        </div>
+        <CampaignDetailContent />
+      </main>
+    </CampaignProvider>
   );
 }

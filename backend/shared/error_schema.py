@@ -37,6 +37,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Dict, Optional
 
+from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
 
@@ -46,6 +47,63 @@ class ErrorCode:
     UNPROCESSABLE_ENTITY: str = "UNPROCESSABLE_ENTITY"
     INTERNAL_ERROR: str = "INTERNAL_ERROR"
     SERVICE_UNAVAILABLE: str = "SERVICE_UNAVAILABLE"
+
+
+class AppError(Exception):
+    """Base class for all application errors.
+
+    Subclasses declare the HTTP status and error code they map to, so route
+    handlers can simply ``raise`` and let the central handler build the
+    response envelope.
+    """
+
+    http_status: int = 500
+    code: str = ErrorCode.INTERNAL_ERROR
+    default_message: str = "An unexpected error occurred"
+
+    def __init__(self, message: Optional[str] = None, detail: Optional[str] = None) -> None:
+        self.message = message if message is not None else self.default_message
+        self.detail = detail
+        super().__init__(self.message)
+
+    def to_response(self) -> JSONResponse:
+        return _make_response(self.http_status, self.code, self.message, self.detail)
+
+
+class BadRequestError(AppError):
+    http_status = 400
+    code = ErrorCode.BAD_REQUEST
+    default_message = "Bad request"
+
+
+class ValidationError(AppError):
+    http_status = 400
+    code = ErrorCode.BAD_REQUEST
+    default_message = "Request validation failed"
+
+
+class NotFoundError(AppError):
+    http_status = 404
+    code = ErrorCode.NOT_FOUND
+    default_message = "Resource not found"
+
+
+class UnprocessableEntityError(AppError):
+    http_status = 422
+    code = ErrorCode.UNPROCESSABLE_ENTITY
+    default_message = "Unprocessable entity"
+
+
+class InternalError(AppError):
+    http_status = 500
+    code = ErrorCode.INTERNAL_ERROR
+    default_message = "An unexpected error occurred"
+
+
+class ServiceUnavailableError(AppError):
+    http_status = 503
+    code = ErrorCode.SERVICE_UNAVAILABLE
+    default_message = "Service unavailable"
 
 
 @dataclass

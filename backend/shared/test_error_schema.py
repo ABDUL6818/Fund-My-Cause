@@ -16,9 +16,15 @@ import pytest
 from fastapi.responses import JSONResponse
 
 from error_schema import (
+    AppError,
+    BadRequestError,
     ErrorCode,
     ErrorDetail,
     ErrorEnvelope,
+    InternalErrorError,
+    NotFoundError,
+    ServiceUnavailableError,
+    UnprocessableEntityError,
     bad_request,
     internal_error,
     not_found,
@@ -135,3 +141,108 @@ class TestErrorCodeConstants:
         ]:
             assert code.isupper()
             assert " " not in code
+
+
+class TestCentralErrorClasses:
+    """Central error classes must map to the correct status and envelope."""
+
+    @pytest.mark.parametrize(
+        "error_cls,expected_status,expected_code",
+        [
+            (BadRequestError, 400, ErrorCode.BAD_REQUEST),
+            (NotFoundError, 404, ErrorCode.NOT_FOUND),
+            (UnprocessableEntityError, 422, ErrorCode.UNPROCESSABLE_ENTITY),
+            (InternalErrorError, 500, ErrorCode.INTERNAL_ERROR),
+            (ServiceUnavailableError, 503, ErrorCode.SERVICE_UNAVAILABLE),
+        ],
+    )
+    def test_error_class_status_and_code(self, error_cls, expected_status, expected_code):
+        err = error_cls("something went wrong")
+        assert isinstance(err, AppError)
+        assert err.status_code == expected_status
+        assert err.code == expected_code
+        assert err.message == "something went wrong"
+
+    @pytest.mark.parametrize(
+        "error_cls,expected_status,expected_code",
+        [
+            (BadRequestError, 400, ErrorCode.BAD_REQUEST),
+            (NotFoundError, 404, ErrorCode.NOT_FOUND),
+            (UnprocessableEntityError, 422, ErrorCode.UNPROCESSABLE_ENTITY),
+            (InternalErrorError, 500, ErrorCode.INTERNAL_ERROR),
+            (ServiceUnavailableError, 503, ErrorCode.SERVICE_UNAVAILABLE),
+        ],
+    )
+    def test_error_class_to_response(self, error_cls, expected_status, expected_code):
+        err = error_cls("something went wrong", detail="extra context")
+        resp = err.to_response()
+        assert resp.status_code == expected_status
+        data = json.loads(resp.body)
+        assert data["error"]["code"] == expected_code
+        assert data["error"]["message"] == "something went wrong"
+        assert data["error"]["detail"] == "extra context"
+
+    def test_error_class_detail_omitted_when_none(self):
+        resp = BadRequestError("bad").to_response()
+        data = json.loads(resp.body)
+        assert "detail" not in data["error"]
+
+    def test_app_error_is_exception(self):
+        with pytest.raises(AppError):
+            raise NotFoundError("missing")
+
+
+class TestErrorHandlerMiddleware:
+    """The single error-handling middleware must produce the envelope."""
+
+    def _make_app(self):
+        from fastapi import FastAPI
+
+        from error_schema import install_error_handlers
+
+        app = FastAPI()
+        install_error_handlers(app)
+
+        @app.get("/raise-app-error")
+        async def _raise_app_error():
+            raise NotFoundError("resource missing", detail="id=7")
+
+        @app.get("/raise-unhandled")
+        async def _raise_unhandled():
+            raise RuntimeError("boom")
+
+        @app.get("/ok")
+        async def _ok():
+            return {"status": "ok"}
+
+        return app
+
+    def test_app_error_maps_to_status_and_envelope(self):
+        from fastapi.testclient import TestClient
+
+        client = TestClient(self._make_app(), raise_server_exceptions=False)
+        resp = client.get("/raise-app-error")
+        assert resp.status_code == 404
+        data = resp.json()
+        assert data["error"]["code"] == ErrorCode.NOT_FOUND
+        assert data["error"]["message"] == "resource missing"
+        assert data["error"]["detail"] == "id=7"
+
+    def test_unhandled_exception_produces_500_envelope(self):
+        from fastapi.testclient import TestClient
+
+        client = TestClient(self._make_app(), raise_server_exceptions=False)
+        resp = client.get("/raise-unhandled")
+        assert resp.status_code == 500
+        data = resp.json()
+        assert data["error"]["code"] == ErrorCode.INTERNAL_ERROR
+        assert "error" in data
+        assert isinstance(data["error"]["message"], str)
+
+    def test_successful_request_unaffected(self):
+        from fastapi.testclient import TestClient
+
+        client = TestClient(self._make_app(), raise_server_exceptions=False)
+        resp = client.get("/ok")
+        assert resp.status_code == 200
+        assert resp.json() == {"status": "ok"}

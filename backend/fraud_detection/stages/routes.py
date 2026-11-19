@@ -13,8 +13,9 @@ from typing import Optional
 import structlog
 from fastapi import BackgroundTasks, Request
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel, Field, ValidationError
 
-from error_schema import bad_request, not_found, unprocessable_entity
+from error_schema import BadRequestError, NotFoundError, UnprocessableEntityError
 from repository import (
     ContributionEvent,
     FlagReason,
@@ -46,6 +47,14 @@ ERROR_SCHEMA_RESPONSES: dict[int, dict] = {
 }
 
 
+class ModerationQueueQuery(BaseModel):
+    """Validation schema for the moderation queue query parameters."""
+
+    reviewed: Optional[bool] = None
+    reason: Optional[FlagReason] = None
+    limit: int = Field(default=50, ge=1, le=500)
+
+
 def healthz() -> dict:
     return {"status": "ok", "timestamp": time.time()}
 
@@ -60,7 +69,7 @@ async def ingest_contribution(request: Request) -> JSONResponse:
     if idempotency_key is not None:
         if len(idempotency_key) > IDEMPOTENCY_KEY_MAX_LEN:
             log.warning("contributions_idempotency_key_too_long", key_length=len(idempotency_key))
-            return bad_request("Idempotency-Key exceeds maximum length")
+            raise BadRequestError("Idempotency-Key exceeds maximum length")
         cached = _IDEMPOTENCY_STORE.get(idempotency_key)
         if cached is not None:
             log.info("contributions_duplicate_rejected", idempotency_key=idempotency_key)
@@ -68,10 +77,15 @@ async def ingest_contribution(request: Request) -> JSONResponse:
 
     try:
         body = await request.json()
-        payload = ContributionPayload(**body)
     except Exception as exc:
+        log.warning("contributions_ingest_invalid_json", error=str(exc))
+        raise BadRequestError("invalid JSON body") from exc
+
+    try:
+        payload = ContributionPayload(**body)
+    except ValidationError as exc:
         log.warning("contributions_ingest_invalid_payload", error=str(exc))
-        return unprocessable_entity("invalid payload")
+        raise UnprocessableEntityError("invalid payload") from exc
 
     queue_depth = scoring_queue.qsize()
     log.info("contribution_queued", campaign_id=payload.campaignId, contributor=payload.contributor,
@@ -107,7 +121,13 @@ def moderation_queue_handler(
     reason: Optional[FlagReason] = None,
     limit: int = 50,
 ) -> JSONResponse:
-    items = get_flags(reviewed=reviewed, reason=reason, limit=limit)
+    try:
+        query = ModerationQueueQuery(reviewed=reviewed, reason=reason, limit=limit)
+    except ValidationError as exc:
+        log.warning("moderation_queue_invalid_query", error=str(exc))
+        raise BadRequestError("invalid query parameters") from exc
+
+    items = get_flags(reviewed=query.reviewed, reason=query.reason, limit=query.limit)
     log.debug("moderation_queue_queried", returned=len(items), total=total_flag_count())
     return JSONResponse(content={
         "total": total_flag_count(), "returned": len(items),
@@ -123,4 +143,4 @@ def mark_reviewed_handler(flag_id: str) -> JSONResponse:
         log.info("flag_marked_reviewed", flag_id=flag_id)
         return JSONResponse(content={"status": "updated", "id": flag_id})
     log.warning("flag_not_found", flag_id=flag_id)
-    return not_found("flag not found")
+    raise NotFoundError("flag not found")
