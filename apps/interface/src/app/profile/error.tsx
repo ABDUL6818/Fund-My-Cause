@@ -6,58 +6,16 @@
 
 "use client";
 
-import { ErrorPageProps } from "@/components/ErrorBoundary";
+import { RouteError, type RouteErrorProps } from "@components-lib/ErrorBoundary";
 
-export default function ProfileError({ error, reset }: ErrorPageProps) {
+export default function ProfileError({ error, reset }: RouteErrorProps) {
   return (
-    <div
-      style={{
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
-        justifyContent: "center",
-        minHeight: "400px",
-        padding: "20px",
-        textAlign: "center",
-      }}
-    >
-      <h1>Failed to load profile</h1>
-      <p style={{ color: "#666", marginBottom: "20px", maxWidth: "500px" }}>
-        {error?.message ||
-          "Unable to load your profile. Please try again or contact support."}
-      </p>
-      <div style={{ display: "flex", gap: "10px" }}>
-        <button
-          onClick={reset}
-          style={{
-            padding: "10px 20px",
-            backgroundColor: "#007bff",
-            color: "white",
-            border: "none",
-            borderRadius: "4px",
-            cursor: "pointer",
-            fontSize: "16px",
-          }}
-        >
-          Try again
-        </button>
-        <a
-          href="/"
-          style={{
-            padding: "10px 20px",
-            backgroundColor: "#6c757d",
-            color: "white",
-            border: "none",
-            borderRadius: "4px",
-            textDecoration: "none",
-            cursor: "pointer",
-            fontSize: "16px",
-            display: "inline-block",
-          }}
-        >
-          Go home
-        </a>
-      </div>
-    </div>
+    <RouteError
+      error={error}
+      reset={reset}
+      title="Failed to load profile"
+      description="Unable to load your profile. Please try again or contact support."
+      homeHref="/"
+    />
   );
 }
