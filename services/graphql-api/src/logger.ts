@@ -5,6 +5,10 @@ const isDev = process.env.NODE_ENV !== "production";
 /**
  * Root pino logger for the graphql-api service.
  *
+ * This is the single logging entry point for the service. All logging must go
+ * through this module — do not instantiate additional pino instances or use
+ * `console.*` anywhere in the service.
+ *
  * For request-scoped logging (where a trace_id must appear on every line),
  * call `requestLogger(traceId)` to get a child logger with `trace_id` bound.
  * Pass that child logger into any code that runs within the request lifecycle.

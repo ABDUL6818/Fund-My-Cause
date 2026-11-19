@@ -20,6 +20,9 @@ import type { IndexerEvent } from "./rpc-client.js";
 /** Event type emitted by the crowdfund contract for a contribution. */
 const CONTRIBUTION_EVENT_TYPE = "Contribute";
 
+/** Queries slower than this (ms) are logged at warn level (#1685). */
+const SLOW_QUERY_THRESHOLD_MS = 50;
+
 /**
  * Single class that satisfies all three repository interfaces for the
  * current in-memory EventStore storage layer.
@@ -40,6 +43,28 @@ export class EventStoreRepository
     this.logger = logger;
   }
 
+  /**
+   * Time a store query and log it when it exceeds the slow-query threshold.
+   * Keeps profiling cheap: `Date.now()` only, no allocation on the hot path.
+   */
+  private timed<T>(operation: string, fn: () => T): T {
+    const start = Date.now();
+    const result = fn();
+    const durationMs = Date.now() - start;
+    if (durationMs >= SLOW_QUERY_THRESHOLD_MS) {
+      this.logger.warn(
+        { operation, durationMs, thresholdMs: SLOW_QUERY_THRESHOLD_MS },
+        "EventStoreRepository slow query",
+      );
+    } else {
+      this.logger.debug(
+        { operation, durationMs },
+        "EventStoreRepository query",
+      );
+    }
+    return result;
+  }
+
   // ── EventRepository ────────────────────────────────────────────────────
 
   /** @inheritdoc */
@@ -53,17 +78,21 @@ export class EventStoreRepository
 
   /** @inheritdoc */
   queryByContract(contractId: string, limit = 100): IndexerEvent[] {
-    return this.store.queryByContract(contractId, limit);
+    return this.timed("queryByContract", () =>
+      this.store.queryByContract(contractId, limit),
+    );
   }
 
   /** @inheritdoc */
   queryByType(type: string, limit = 100): IndexerEvent[] {
-    return this.store.queryByType(type, limit);
+    return this.timed("queryByType", () =>
+      this.store.queryByType(type, limit),
+    );
   }
 
   /** @inheritdoc */
   getAllEvents(limit = 100): IndexerEvent[] {
-    return this.store.getAllEvents(limit);
+    return this.timed("getAllEvents", () => this.store.getAllEvents(limit));
   }
 
   /** @inheritdoc */
@@ -75,17 +104,21 @@ export class EventStoreRepository
 
   /** @inheritdoc */
   getEventsByCampaign(campaignId: string, limit = 100): IndexerEvent[] {
-    return this.store.queryByContract(campaignId, limit);
+    return this.timed("getEventsByCampaign", () =>
+      this.store.queryByContract(campaignId, limit),
+    );
   }
 
   // ── ContributionRepository ─────────────────────────────────────────────
 
   /** @inheritdoc */
   getContributionsForCampaign(campaignId: string, limit = 100): IndexerEvent[] {
-    return this.store.queryByContractAndType(
-      campaignId,
-      CONTRIBUTION_EVENT_TYPE,
-      limit,
+    return this.timed("getContributionsForCampaign", () =>
+      this.store.queryByContractAndType(
+        campaignId,
+        CONTRIBUTION_EVENT_TYPE,
+        limit,
+      ),
     );
   }
 }

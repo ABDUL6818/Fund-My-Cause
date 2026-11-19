@@ -6,9 +6,10 @@ with descriptive error messages for missing or invalid settings.
 
 import os
 from typing import Any, Callable, Dict, List, Optional, Union
-import structlog
 
-logger = structlog.get_logger(__name__)
+from backend.shared.structured_logger import get_logger
+
+logger = get_logger(__name__)
 
 
 class ConfigRule:
@@ -90,7 +91,7 @@ class ConfigValidator:
                     config[key] = value.lower() in ("true", "1", "yes", "on")
                 else:
                     config[key] = value
-            except (ValueError, TypeError) as e:
+            except (ValueError, TypeError):
                 error_msg = f'Failed to convert {rule.env} to {rule.type_.__name__}: "{value}"'
                 if rule.description:
                     error_msg += f" ({rule.description})"
@@ -119,21 +120,32 @@ def require_env(
         error_msg = f"Required environment variable missing: {name}"
         if description:
             error_msg += f" ({description})"
-        logger.error(error_msg)
+        logger.error("required_env_missing", env=name, description=description)
         raise ValueError(error_msg)
 
     if enum and value not in enum:
         error_msg = f'Invalid value for {name}: "{value}". Must be one of: {", ".join(enum)}'
         if description:
             error_msg += f" ({description})"
-        logger.error(error_msg)
+        logger.error(
+            "env_invalid_enum",
+            env=name,
+            value=value,
+            allowed=enum,
+            description=description,
+        )
         raise ValueError(error_msg)
 
     if validate and not validate(value):
         error_msg = f'Invalid value for {name}: "{value}"'
         if description:
             error_msg += f" ({description})"
-        logger.error(error_msg)
+        logger.error(
+            "env_invalid_value",
+            env=name,
+            value=value,
+            description=description,
+        )
         raise ValueError(error_msg)
 
     return value
@@ -156,14 +168,25 @@ def get_optional_env(
         error_msg = f'Invalid value for {name}: "{value}". Must be one of: {", ".join(enum)}'
         if description:
             error_msg += f" ({description})"
-        logger.error(error_msg)
+        logger.error(
+            "env_invalid_enum",
+            env=name,
+            value=value,
+            allowed=enum,
+            description=description,
+        )
         raise ValueError(error_msg)
 
     if validate and not validate(value):
         error_msg = f'Invalid value for {name}: "{value}"'
         if description:
             error_msg += f" ({description})"
-        logger.error(error_msg)
+        logger.error(
+            "env_invalid_value",
+            env=name,
+            value=value,
+            description=description,
+        )
         raise ValueError(error_msg)
 
     return value
@@ -185,7 +208,7 @@ def get_env_int(
             error_msg = f"Required integer environment variable missing: {name}"
             if description:
                 error_msg += f" ({description})"
-            logger.error(error_msg)
+            logger.error("required_env_missing", env=name, description=description)
             raise ValueError(error_msg)
         return default
 
@@ -195,21 +218,38 @@ def get_env_int(
         error_msg = f'Invalid integer value for {name}: "{value}"'
         if description:
             error_msg += f" ({description})"
-        logger.error(error_msg)
+        logger.error(
+            "env_invalid_int",
+            env=name,
+            value=value,
+            description=description,
+        )
         raise ValueError(error_msg)
 
     if min_value is not None and int_value < min_value:
         error_msg = f"Value for {name} is too small: {int_value} < {min_value}"
         if description:
             error_msg += f" ({description})"
-        logger.error(error_msg)
+        logger.error(
+            "env_value_too_small",
+            env=name,
+            value=int_value,
+            min_value=min_value,
+            description=description,
+        )
         raise ValueError(error_msg)
 
     if max_value is not None and int_value > max_value:
         error_msg = f"Value for {name} is too large: {int_value} > {max_value}"
         if description:
             error_msg += f" ({description})"
-        logger.error(error_msg)
+        logger.error(
+            "env_value_too_large",
+            env=name,
+            value=int_value,
+            max_value=max_value,
+            description=description,
+        )
         raise ValueError(error_msg)
 
     return int_value
@@ -235,5 +275,10 @@ def get_env_bool(
     error_msg = f'Invalid boolean value for {name}: "{value}"'
     if description:
         error_msg += f" ({description})"
-    logger.error(error_msg)
+    logger.error(
+        "env_invalid_bool",
+        env=name,
+        value=value,
+        description=description,
+    )
     raise ValueError(error_msg)

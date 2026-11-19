@@ -30,21 +30,11 @@ severity_score(flag_count, max_flags)
 
 from __future__ import annotations
 
-import sys
-import os
-
-# ---------------------------------------------------------------------------
-# Allow importing shared_math_utils regardless of how Python resolves paths.
-# In a proper package layout this would be handled by the package installer
-# or PYTHONPATH.  We add the directory to sys.path at import time so that
-# both the test runner (pytest invoked from backend/shared/) and the service
-# runner (uvicorn invoked from backend/fraud_detection/) find the module.
-# ---------------------------------------------------------------------------
-_SHARED_DIR = os.path.join(os.path.dirname(__file__), "..", "shared")
-if _SHARED_DIR not in sys.path:
-    sys.path.insert(0, os.path.abspath(_SHARED_DIR))
-
-from shared_math_utils import normalize, round_score  # noqa: E402  (path insertion above)
+# ``shared_math_utils`` is importable via the package layout / PYTHONPATH
+# configured by the service and test runners.  This module deliberately
+# performs no ``sys.path`` mutation and has no logging side effects: it is a
+# pure scoring module.
+from shared_math_utils import normalize, round_score
 
 __all__ = [
     "round_score",

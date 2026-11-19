@@ -287,9 +287,4 @@ export const typeDefs = gql`
 
   # Scalars
   scalar BigInt
-  # NOTE: DateTime scalar removed — no field in this schema used DateTime as its
-  # type (all date/time fields use String!).  Evidence: static analysis of the
-  # full SDL above shows zero field definitions referencing "DateTime".
-  # The generated client type (apps/interface/src/lib/graphql/generated.ts) was
-  # regenerated accordingly; no consumer broke.
 `;

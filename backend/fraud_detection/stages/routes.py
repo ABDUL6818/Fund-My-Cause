@@ -25,8 +25,9 @@ from repository import (
 )
 from scoring import run_full_scan
 
-from stages.idempotency import IDEMPOTENCY_KEY_HEADER, IDEMPOTENCY_KEY_MAX_LEN, IdempotencyStore
-from stages.scoring_worker import ContributionPayload, scoring_queue, get_metrics
+from stages.contribution_service import ContributionService
+from stages.idempotency import IDEMPOTENCY_KEY_HEADER
+from stages.scoring_worker import get_metrics
 
 log: structlog.BoundLogger = structlog.get_logger("fraud_detection")
 

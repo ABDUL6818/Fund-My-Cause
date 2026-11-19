@@ -16,8 +16,7 @@ from enum import Enum
 from typing import AsyncIterator, Optional
 
 import structlog
-from fastapi import FastAPI, BackgroundTasks, Request, Response
-from fastapi.responses import JSONResponse
+from fastapi import FastAPI
 
 from errors import register_exception_handlers
 
@@ -26,8 +25,14 @@ from scoring import jaccard_similarity
 
 # ---------------------------------------------------------------------------
 # Logging — structlog configured for JSON output in production,
-# coloured console output in development.
+# coloured console output in development.  Must run before the app (and any
+# request-scoped loggers) is constructed so trace IDs are bound (#1683).
 # ---------------------------------------------------------------------------
+
+from logging_config import configure_structlog
+
+configure_structlog()
+log: structlog.BoundLogger = structlog.get_logger("fraud_detection")
 
 from repository import (  # noqa: F401
     CampaignRecord, ContributionEvent, Flag, FlagReason, FlagSeverity, RefundEvent,
@@ -49,15 +54,9 @@ from stages.scoring_worker import (  # noqa: F401
     ContributionPayload, ScoringJob, scoring_queue as _scoring_queue,
     scoring_worker as _scoring_worker,
 )
-from stages.routes import (
-    healthz as _healthz, readyz as _readyz, ingest_contribution,
-    trigger_scan, get_metrics_handler, moderation_queue_handler, mark_reviewed_handler,
-    _IDEMPOTENCY_STORE, IdempotencyStore,  # noqa: F401
-)
+from stages.routes import build_router
+from stages.services import FraudDetectionServices, build_services
 from config import load_fraud_detection_config  # noqa: F401
-
-configure_structlog()
-log: structlog.BoundLogger = structlog.get_logger("fraud_detection")
 
 # ---------------------------------------------------------------------------
 # Trace-ID convention — imported from the canonical module
@@ -82,10 +81,13 @@ from stages.idempotency import (  # noqa: E402
     record_idempotency,
 )
 
-# Application-wide idempotency store.
-# Swap for PostgresIdempotencyStore(pool) in production via dependency injection
-# or application lifespan configuration.
+# Application-wide idempotency store, constructed once at startup and injected
+# into the route controllers (#1682).  Swap for PostgresIdempotencyStore(pool)
+# in production via application lifespan configuration.
 _idempotency_store: IdempotencyStore = InMemoryIdempotencyStore()
+
+# Service layer — constructed once and injected into the route controllers.
+_services: FraudDetectionServices = build_services(idempotency_store=_idempotency_store)
 
 
 # ---------------------------------------------------------------------------
