@@ -36,6 +36,15 @@ _IDEMPOTENCY_STORE = IdempotencyStore()
 import repository as _repo
 _CONTRIBUTIONS = _repo._CONTRIBUTIONS
 
+# Shared error schema references used by the OpenAPI spec generation so that
+# every error response documented in the spec matches the runtime payloads
+# produced by the helpers in ``error_schema``.
+ERROR_SCHEMA_RESPONSES: dict[int, dict] = {
+    400: {"description": "Bad request", "content": {"application/json": {"schema": bad_request("").body_schema()}}},
+    404: {"description": "Not found", "content": {"application/json": {"schema": not_found("").body_schema()}}},
+    422: {"description": "Unprocessable entity", "content": {"application/json": {"schema": unprocessable_entity("").body_schema()}}},
+}
+
 
 def healthz() -> dict:
     return {"status": "ok", "timestamp": time.time()}
@@ -108,10 +117,10 @@ def moderation_queue_handler(
     })
 
 
-def mark_reviewed_handler(flag_id: str) -> dict:
+def mark_reviewed_handler(flag_id: str) -> JSONResponse:
     found = mark_flag_reviewed(flag_id)
     if found:
         log.info("flag_marked_reviewed", flag_id=flag_id)
-        return {"status": "updated", "id": flag_id}
+        return JSONResponse(content={"status": "updated", "id": flag_id})
     log.warning("flag_not_found", flag_id=flag_id)
     return not_found("flag not found")
