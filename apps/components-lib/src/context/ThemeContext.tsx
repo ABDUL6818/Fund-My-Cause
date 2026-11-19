@@ -1,8 +1,9 @@
 "use client";
 
 import React, { createContext, useContext, ReactNode } from "react";
+import { themeTokens, type ThemeName } from "../tokens";
 
-export type Theme = "dark" | "light";
+export type Theme = ThemeName;
 
 /**
  * Public contract returned by {@link useTheme}.
@@ -41,7 +42,7 @@ export interface ThemeProviderProps {
 
 export function ThemeProvider({
   children,
-  initialTheme = "dark",
+  initialTheme = themeTokens.defaultTheme,
   onThemeChange,
 }: ThemeProviderProps) {
   const [theme, setThemeState] = React.useState<Theme>(initialTheme);
@@ -52,7 +53,7 @@ export function ThemeProvider({
   };
 
   const toggleTheme = () => {
-    const newTheme = theme === "dark" ? "light" : "dark";
+    const newTheme = themeTokens.toggle[theme];
     setTheme(newTheme);
   };
 
@@ -68,7 +69,7 @@ export function ThemeProvider({
 }
 
 const defaultThemeContext: ThemeContextType = {
-  theme: "dark",
+  theme: themeTokens.defaultTheme,
   toggleTheme: () => {},
   setTheme: () => {},
 };

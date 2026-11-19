@@ -23,6 +23,14 @@ from error_schema import (
     not_found,
     service_unavailable,
 )
+from errors import (
+    AppError,
+    BadRequestError,
+    NotFoundError,
+    InternalError,
+    ServiceUnavailableError,
+    error_handler,
+)
 from service import app
 
 client = TestClient(app)
@@ -165,3 +173,69 @@ class TestErrorCodeConstants:
         assert ErrorCode.NOT_FOUND == "NOT_FOUND"
         assert ErrorCode.INTERNAL_ERROR == "INTERNAL_ERROR"
         assert ErrorCode.SERVICE_UNAVAILABLE == "SERVICE_UNAVAILABLE"
+
+
+# ── Central error classes and handler ─────────────────────────────────────────
+
+class TestCentralErrorClasses:
+    """The central error classes must map to the same codes/statuses as the factories."""
+
+    @pytest.mark.parametrize(
+        "exc_cls, expected_status, expected_code",
+        [
+            (BadRequestError, 400, ErrorCode.BAD_REQUEST),
+            (NotFoundError, 404, ErrorCode.NOT_FOUND),
+            (InternalError, 500, ErrorCode.INTERNAL_ERROR),
+            (ServiceUnavailableError, 503, ErrorCode.SERVICE_UNAVAILABLE),
+        ],
+    )
+    def test_error_class_status_and_code(self, exc_cls, expected_status, expected_code):
+        exc = exc_cls("boom")
+        assert isinstance(exc, AppError)
+        assert exc.status_code == expected_status
+        assert exc.code == expected_code
+
+    def test_error_class_detail_optional(self):
+        assert BadRequestError("bad").detail is None
+        assert BadRequestError("bad", detail="why").detail == "why"
+
+    @pytest.mark.parametrize(
+        "exc_cls, expected_status, expected_code",
+        [
+            (BadRequestError, 400, ErrorCode.BAD_REQUEST),
+            (NotFoundError, 404, ErrorCode.NOT_FOUND),
+            (InternalError, 500, ErrorCode.INTERNAL_ERROR),
+            (ServiceUnavailableError, 503, ErrorCode.SERVICE_UNAVAILABLE),
+        ],
+    )
+    def test_handler_produces_canonical_envelope(self, exc_cls, expected_status, expected_code):
+        import json
+
+        resp = error_handler(exc_cls("boom"))
+        assert isinstance(resp, JSONResponse)
+        assert resp.status_code == expected_status
+        data = json.loads(resp.body)
+        assert data["error"]["code"] == expected_code
+        assert data["error"]["message"] == "boom"
+        assert "detail" not in data["error"]
+
+    def test_handler_includes_detail_when_provided(self):
+        import json
+
+        resp = error_handler(BadRequestError("bad", detail="limit must be 1–20"))
+        data = json.loads(resp.body)
+        assert data["error"]["detail"] == "limit must be 1–20"
+
+    def test_factories_delegate_to_central_classes(self):
+        """Factory helpers must produce the same envelope as the central handler."""
+        import json
+
+        for factory, exc_cls in [
+            (bad_request, BadRequestError),
+            (not_found, NotFoundError),
+            (internal_error, InternalError),
+            (service_unavailable, ServiceUnavailableError),
+        ]:
+            from_factory = json.loads(factory("msg", detail="d").body)
+            from_handler = json.loads(error_handler(exc_cls("msg", detail="d")).body)
+            assert from_factory == from_handler

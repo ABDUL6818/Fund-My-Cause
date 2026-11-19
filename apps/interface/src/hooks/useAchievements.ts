@@ -12,6 +12,10 @@ import type {
   AchievementUnlockedEvent,
 } from "@/types/gamification";
 import { QUERY_KEYS } from "@/lib/queryKeys";
+import {
+  computeAchievementStats,
+  buildReferralCode,
+} from "@fm/shared-utils";
 
 interface UseAchievementsParams {
   userAddress?: string;
@@ -197,7 +201,7 @@ async function fetchGamificationProfile(
     totalPoints: 2150,
     contributionStreak: 12,
     lastContributionDate: Date.now() - 86400000,
-    referralCode: "FM" + userAddress.slice(0, 6).toUpperCase(),
+    referralCode: buildReferralCode(userAddress),
     referralsCount: 5,
     leaderboardRank: 87,
     level: 5,
@@ -311,21 +315,14 @@ export function useAchievements({
   });
 
   // Compute statistics
-  const stats = useMemo(() => {
-    const total = Object.keys(ACHIEVEMENT_DEFINITIONS).length;
-    const unlocked = achievements.length;
-    const completion = total > 0 ? (unlocked / total) * 100 : 0;
-
-    return {
-      total,
-      unlocked,
-      completion,
-      nextMilestone:
-        unlocked % 5 === 0
-          ? unlocked + 5
-          : Math.ceil(unlocked / 5) * 5,
-    };
-  }, [achievements]);
+  const stats = useMemo(
+    () =>
+      computeAchievementStats(
+        Object.keys(ACHIEVEMENT_DEFINITIONS).length,
+        achievements.length
+      ),
+    [achievements]
+  );
 
   return {
     // Data

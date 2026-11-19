@@ -1,17 +1,10 @@
 "use client";
 
 import React from "react";
-import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useModalSlice } from "@/hooks/useUiSlice";
 import type { ModalConfig } from "@/store/useModalStore";
-
-const sizes: Record<NonNullable<ModalConfig["size"]>, string> = {
-  sm: "max-w-sm",
-  md: "max-w-md",
-  lg: "max-w-lg",
-  xl: "max-w-xl",
-};
+import { Modal } from "@interface/components-lib";
 
 function ModalItem({
   modal,
@@ -26,6 +19,62 @@ function ModalItem({
 }) {
   const isTop = index === total - 1;
   const offset = (total - 1 - index) * 8;
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const previouslyFocusedRef = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    if (!isTop) return;
+
+    previouslyFocusedRef.current =
+      document.activeElement instanceof HTMLElement
+        ? document.activeElement
+        : null;
+
+    const dialog = dialogRef.current;
+    const focusable = getFocusableElements(dialog);
+    (focusable[0] ?? dialog)?.focus();
+
+    return () => {
+      const previous = previouslyFocusedRef.current;
+      if (previous && document.contains(previous)) {
+        previous.focus();
+      }
+    };
+  }, [isTop]);
+
+  const handleKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (!isTop) return;
+
+    if (event.key === "Escape") {
+      event.stopPropagation();
+      onClose();
+      return;
+    }
+
+    if (event.key !== "Tab") return;
+
+    const dialog = dialogRef.current;
+    const focusable = getFocusableElements(dialog);
+    if (focusable.length === 0) {
+      event.preventDefault();
+      dialog?.focus();
+      return;
+    }
+
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    const active = document.activeElement;
+
+    if (event.shiftKey) {
+      if (active === first || !dialog?.contains(active)) {
+        event.preventDefault();
+        last.focus();
+      }
+    } else if (active === last || !dialog?.contains(active)) {
+      event.preventDefault();
+      first.focus();
+    }
+  };
 
   return (
     <div
@@ -45,45 +94,23 @@ function ModalItem({
         aria-hidden="true"
       />
       <div
-        className={cn(
-          "relative bg-[var(--color-surface)] rounded-[var(--radius-2xl)] shadow-2xl w-full mx-4",
-          "border border-[var(--color-border)]",
-          "transition-all duration-200",
-          "animate-in zoom-in-95 fade-in duration-200",
-          sizes[modal.size ?? "md"],
-        )}
+        className="relative w-full mx-4"
         style={{
           transform: `translateY(-${offset}px) scale(${1 - (total - 1 - index) * 0.02})`,
         }}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby={modal.title ? `modal-title-${modal.id}` : undefined}
       >
-        <div className="flex items-center justify-between p-6 border-b border-[var(--color-border)]">
-          {modal.title && (
-            <h2
-              id={`modal-title-${modal.id}`}
-              className="text-lg font-semibold text-[var(--color-text-primary)]"
-            >
-              {modal.title}
-            </h2>
-          )}
-          <button
-            onClick={onClose}
-            className="ml-auto p-1 rounded-[var(--radius-lg)] hover:bg-[var(--color-surface-elevated)] transition-colors text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]"
-            aria-label="Close modal"
-          >
-            <X className="w-5 h-5" aria-hidden="true" />
-          </button>
-        </div>
-        <div className="p-6 text-[var(--color-text-primary)]">
+        <Modal
+          open
+          onClose={onClose}
+          title={modal.title}
+          footer={modal.footer}
+          size={modal.size ?? "md"}
+          closeOnBackdropClick={false}
+          showCloseButton
+          className="mx-0"
+        >
           {modal.content}
-        </div>
-        {modal.footer && (
-          <div className="flex items-center justify-end gap-3 p-6 border-t border-[var(--color-border)]">
-            {modal.footer}
-          </div>
-        )}
+        </Modal>
       </div>
     </div>
   );

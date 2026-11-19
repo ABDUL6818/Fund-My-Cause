@@ -13,6 +13,10 @@ export interface RouteErrorProps {
  * an error boundary per segment and passes it `{ error, reset }` — this just
  * renders that through the shared `ErrorFallback` so every route shows the
  * same look and the same retry action instead of a bespoke one-off per route.
+ *
+ * User-facing error messaging (including any toast/notification surfacing) is
+ * centralized in `ErrorFallback`, which delegates to the shared notification
+ * service. This component intentionally contains no inline alert markup.
  */
 export function RouteError({ error, reset, level = "section" }: RouteErrorProps) {
   return <ErrorFallback error={error} reset={reset} level={level} />;

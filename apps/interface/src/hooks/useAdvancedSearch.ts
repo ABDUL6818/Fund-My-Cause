@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { useDebouncedValue } from "@packages/shared-utils";
 import type { Campaign } from "@/types/campaign";
 import {
   advancedSearch,
@@ -52,6 +53,8 @@ export function useAdvancedSearch(campaigns: Campaign[]) {
 
   // Local controlled input value (debounced to URL)
   const [inputValue, setInputValue] = useState(filters.query ?? "");
+  // Shared debounce helper — single source of truth for the 300 ms delay
+  const debouncedInput = useDebouncedValue(inputValue, 300);
   // User category preference state (persisted to localStorage)
   const [preferences, setPreferences] = useState<UserPreferences>(loadPreferences);
 
@@ -86,11 +89,10 @@ export function useAdvancedSearch(campaigns: Campaign[]) {
     [router, searchParams],
   );
 
-  // Debounce: push input changes to URL after 300 ms
+  // Push debounced input changes to the URL (shareable links)
   useEffect(() => {
-    const t = setTimeout(() => updateParam("q", inputValue), 300);
-    return () => clearTimeout(t);
-  }, [inputValue, updateParam]);
+    updateParam("q", debouncedInput);
+  }, [debouncedInput, updateParam]);
 
   // Record each new search query in preferences
   useEffect(() => {

@@ -6,6 +6,7 @@ const config: StorybookConfig = {
     "@storybook/addon-links",
     "@storybook/addon-essentials",
     "@storybook/addon-interactions",
+    "@storybook/addon-a11y",
   ],
   framework: {
     name: "@storybook/react-webpack5",
@@ -15,6 +16,19 @@ const config: StorybookConfig = {
     autodocs: "tag",
   },
   staticDirs: ["../public"],
+  webpackFinal: async (webpackConfig) => {
+    // Resolve stories and their imports through the single barrel index.ts
+    // instead of the removed *.entry.ts files.
+    webpackConfig.resolve = webpackConfig.resolve ?? {};
+    webpackConfig.resolve.extensions = [
+      ...(webpackConfig.resolve.extensions ?? []),
+      ".ts",
+      ".tsx",
+      ".js",
+      ".jsx",
+    ];
+    return webpackConfig;
+  },
 };
 
 export default config;

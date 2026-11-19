@@ -18,6 +18,8 @@ from typing import AsyncIterator, Optional
 import structlog
 from fastapi import FastAPI
 
+from errors import register_exception_handlers
+
 # Shared scoring helpers — single implementation per #1514.
 from scoring import jaccard_similarity
 
@@ -413,5 +415,13 @@ async def lifespan(app_: FastAPI) -> AsyncIterator[None]:
 app = FastAPI(title="Fund-My-Cause Fraud Detection", version="1.2.0", lifespan=lifespan)
 app.add_middleware(TraceIDMiddleware)
 
-# Routes are thin controllers; business logic lives in the injected services.
-app.include_router(build_router(_services))
+# Central error handling — single source of truth for error responses.
+register_exception_handlers(app)
+
+app.get("/healthz")(_healthz)
+app.get("/readyz")(_readyz)
+app.post("/contributions")(ingest_contribution)
+app.post("/scan")(trigger_scan)
+app.get("/metrics")(get_metrics_handler)
+app.get("/moderation-queue")(moderation_queue_handler)
+app.patch("/moderation-queue/{flag_id}/reviewed")(mark_reviewed_handler)

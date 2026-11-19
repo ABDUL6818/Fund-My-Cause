@@ -45,3 +45,7 @@ export function useBreakpoint() {
     isDesktop: matches.lg,
   };
 }
+
+export { breakpoints };
+export type { Breakpoint };
+export default useBreakpoint;

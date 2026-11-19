@@ -17,7 +17,12 @@ function resolveKey(namespace: string | undefined, key: string): string {
     if (current == null || typeof current !== "object") return `${namespace}.${key}`;
     current = (current as Record<string, unknown>)[part];
   }
-  return typeof current === "string" ? current : `${namespace}.${key}`;
+  if (typeof current === "string") return current;
+  // Contract error messages live under the "errors" namespace, keyed by
+  // contract error code (e.g. t("CONTRACT_NOT_FOUND")). Resolve those too.
+  const errors = messages.errors;
+  if (errors && typeof errors[key] === "string") return errors[key];
+  return `${namespace}.${key}`;
 }
 
 const useTranslations = (namespace?: string) => {

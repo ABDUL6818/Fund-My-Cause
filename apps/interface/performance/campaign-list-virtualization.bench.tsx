@@ -1,5 +1,5 @@
 import React from "react";
-import { bench, describe, beforeAll, vi } from "vitest";
+import { bench, describe, beforeAll, expect, vi } from "vitest";
 import { render, cleanup } from "@testing-library/react";
 import { CampaignCard } from "@/components/ui/CampaignCard";
 import { VirtualizedGrid } from "@/components/ui/VirtualizedGrid";
@@ -53,6 +53,11 @@ function Providers({ children }: { children: React.ReactNode }) {
 
 const dataset = generateCampaigns(DATASET_SIZE);
 
+// Memoized wrapper mirroring how the campaign list consumes CampaignCard.
+// React.memo bails out of re-rendering when props are referentially equal,
+// which is the behavior profiled by the re-render benchmark below.
+const MemoizedCampaignCard = React.memo(CampaignCard);
+
 /**
  * Run with: `npx vitest bench performance/campaign-list-virtualization.bench.tsx`
  * (from apps/interface). Compares mounting a fixed 1000-campaign dataset as a
@@ -65,7 +70,11 @@ describe(`campaign list @ ${DATASET_SIZE} items`, () => {
       <Providers>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           {dataset.map((campaign, i) => (
-            <CampaignCard key={campaign.id} campaign={campaign} index={i} />
+            <MemoizedCampaignCard
+              key={campaign.id}
+              campaign={campaign}
+              index={i}
+            />
           ))}
         </div>
       </Providers>,
@@ -84,7 +93,7 @@ describe(`campaign list @ ${DATASET_SIZE} items`, () => {
           gap={GAP}
           minColumnWidth={MIN_COLUMN_WIDTH}
           renderItem={(campaign, i) => (
-            <CampaignCard campaign={campaign} index={i} />
+            <MemoizedCampaignCard campaign={campaign} index={i} />
           )}
         />
       </Providers>,
@@ -98,6 +107,12 @@ describe(`campaign list @ ${DATASET_SIZE} items`, () => {
       `[bench] render count — unvirtualized: ${unvirtualizedCount}/${dataset.length} cards mounted, ` +
         `virtualized: ${virtualizedCount}/${dataset.length} cards mounted`,
     );
+
+    // Profiling evidence for #1664: virtualization must mount far fewer cards
+    // than the flat list, otherwise the optimization is not effective.
+    expect(unvirtualizedCount).toBe(dataset.length);
+    expect(virtualizedCount).toBeGreaterThan(0);
+    expect(virtualizedCount).toBeLessThan(unvirtualizedCount / 2);
   });
 
   bench("unvirtualized: mount all campaign cards", () => {
@@ -105,7 +120,11 @@ describe(`campaign list @ ${DATASET_SIZE} items`, () => {
       <Providers>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           {dataset.map((campaign, i) => (
-            <CampaignCard key={campaign.id} campaign={campaign} index={i} />
+            <MemoizedCampaignCard
+              key={campaign.id}
+              campaign={campaign}
+              index={i}
+            />
           ))}
         </div>
       </Providers>,
@@ -123,9 +142,26 @@ describe(`campaign list @ ${DATASET_SIZE} items`, () => {
           gap={GAP}
           minColumnWidth={MIN_COLUMN_WIDTH}
           renderItem={(campaign, i) => (
-            <CampaignCard campaign={campaign} index={i} />
+            <MemoizedCampaignCard campaign={campaign} index={i} />
           )}
         />
+      </Providers>,
+    );
+    unmount();
+  });
+
+  bench("memoized: re-render with identical props (no re-render)", () => {
+    const campaign = dataset[0];
+    const { rerender, unmount } = render(
+      <Providers>
+        <MemoizedCampaignCard campaign={campaign} index={0} />
+      </Providers>,
+    );
+    // Re-rendering with referentially equal props should be a cheap no-op
+    // thanks to React.memo, which is the core of the #1664 optimization.
+    rerender(
+      <Providers>
+        <MemoizedCampaignCard campaign={campaign} index={0} />
       </Providers>,
     );
     unmount();

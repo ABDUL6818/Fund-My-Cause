@@ -1,4 +1,7 @@
-/* RTL layout support using CSS logical properties */
+/* RTL layout support using CSS logical properties.
+   Color/token values are NOT declared here — they come from the shared
+   design-token source (see tokens.css / Tailwind config) so there is a
+   single source of truth. */
 
 [dir="rtl"] {
   /* Flip inline-start/end paddings and margins already handled by logical props.
@@ -6,7 +9,6 @@
 
   /* Text alignment */
   text-align: start;
-
 
   /* Navigation and menus */
   nav .flex {
@@ -30,7 +32,6 @@
     unicode-bidi: plaintext;
   }
 
-
   /* Logical margin/padding shorthands for common layout patterns */
   .ms-auto {
     margin-inline-start: auto;
@@ -41,7 +42,6 @@
     margin-inline-end: auto;
     margin-inline-start: 0;
   }
-
 }
 
 /* Logical property utilities — usable in both LTR and RTL */
