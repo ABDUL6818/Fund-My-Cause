@@ -25,6 +25,11 @@ export {
   type FormatCampaignCardOptions,
   type FormattedCampaignCard,
 } from "./utils/formatCampaignCard";
+export {
+  formatAmount,
+  type FormatAmountOptions,
+  type FormatAmountCurrency,
+} from "@fund-my-cause/shared-utils";
 export { cn } from "./lib/utils";
 
 // ── Form primitives ────────────────────────────────────────────────────────

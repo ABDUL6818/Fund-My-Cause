@@ -250,6 +250,8 @@ export function CampaignHeader({
             src={resolvedSrc}
             alt={alt}
             className={imageClass}
+            loading="lazy"
+            decoding="async"
             onError={() => setFailed(true)}
           />
         ) : null}
