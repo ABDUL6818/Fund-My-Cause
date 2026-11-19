@@ -96,22 +96,21 @@ to the selection rule breaks a test before it reaches production.
 
 from __future__ import annotations
 
-import logging
 import math
 import os
 import re
 import sys
 import time
 from dataclasses import dataclass, field
-from typing import Callable, Optional
+from typing import Callable, Optional, Protocol
 
 import structlog
-from fastapi import FastAPI, Query, Request, Response
+from fastapi import Depends, FastAPI, Query, Request, Response
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from scoring_config import SCORING_CONFIG
-from error_schema import bad_request, internal_error
+from error_schema import internal_error
 
 # ---------------------------------------------------------------------------
 # Shared DB pool config (#1128) — see backend/shared/db_config.py. Neither
@@ -123,29 +122,14 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."
 from db_config import load_db_pool_config  # noqa: E402
 
 # ---------------------------------------------------------------------------
-# Structured logging — same configuration as fraud_detection/pipeline.py
-# (#895 — centralise logging across all backend services)
+# Structured logging — shared configuration (#895/#1683). See
+# backend/shared/structured_logger.py and docs/logging-conventions.md.
 # ---------------------------------------------------------------------------
+from structured_logger import configure_structlog, get_logger  # noqa: E402
 
-structlog.configure(
-    processors=[
-        structlog.contextvars.merge_contextvars,       # injects trace_id automatically
-        structlog.stdlib.add_log_level,
-        structlog.processors.TimeStamper(fmt="iso"),
-        structlog.processors.StackInfoRenderer(),
-        structlog.processors.format_exc_info,
-        structlog.dev.ConsoleRenderer()
-        if __import__("os").getenv("LOG_FORMAT") != "json"
-        else structlog.processors.JSONRenderer(),
-    ],
-    wrapper_class=structlog.make_filtering_bound_logger(
-        logging.getLevelName(__import__("os").getenv("LOG_LEVEL", "INFO"))
-    ),
-    context_class=dict,
-    logger_factory=structlog.PrintLoggerFactory(),
-)
+configure_structlog()
 
-log: structlog.BoundLogger = structlog.get_logger("recommendations")
+log: structlog.BoundLogger = get_logger("recommendations")
 
 # Effective DB pool configuration (#1128). Not yet backing a live connection
 # pool — this service stores data in-memory (see module docstring) — but
@@ -212,29 +196,38 @@ class TraceIDMiddleware(BaseHTTPMiddleware):
 # ---------------------------------------------------------------------------
 # In-process cache (TTL-based)
 # ---------------------------------------------------------------------------
-_CACHE: dict[str, tuple[float, object]] = {}
 CACHE_TTL_SECONDS = 300  # 5 minutes
 
-# _CACHE is keyed by distinct (wallet, limit) pairs, so an unbounded number of
-# distinct wallets querying the service would grow it without limit. Bound it
-# with simple FIFO eviction (dicts preserve insertion order in Python 3.7+),
+# The cache is keyed by distinct (wallet, limit) pairs, so an unbounded number
+# of distinct wallets querying the service would grow it without limit. Bound
+# it with simple FIFO eviction (dicts preserve insertion order in Python 3.7+),
 # mirroring the bounded-queue approach fraud_detection uses for its own
 # in-memory growth risk.
 CACHE_MAX_SIZE = 1000
 
 
-def _cache_get(key: str) -> object | None:
-    entry = _CACHE.get(key)
-    if entry and time.time() - entry[0] < CACHE_TTL_SECONDS:
-        return entry[1]
-    return None
+class TTLCache:
+    """Small bounded TTL cache used by :class:`RecommendationService`."""
 
+    def __init__(self, ttl_seconds: int = CACHE_TTL_SECONDS, max_size: int = CACHE_MAX_SIZE) -> None:
+        self._store: dict[str, tuple[float, object]] = {}
+        self._ttl_seconds = ttl_seconds
+        self._max_size = max_size
 
-def _cache_set(key: str, value: object) -> None:
-    if key not in _CACHE and len(_CACHE) >= CACHE_MAX_SIZE:
-        oldest_key = next(iter(_CACHE))
-        del _CACHE[oldest_key]
-    _CACHE[key] = (time.time(), value)
+    def get(self, key: str) -> object | None:
+        entry = self._store.get(key)
+        if entry and time.time() - entry[0] < self._ttl_seconds:
+            return entry[1]
+        return None
+
+    def set(self, key: str, value: object) -> None:
+        if key not in self._store and len(self._store) >= self._max_size:
+            oldest_key = next(iter(self._store))
+            del self._store[oldest_key]
+        self._store[key] = (time.time(), value)
+
+    def clear(self) -> None:
+        self._store.clear()
 
 
 # ---------------------------------------------------------------------------
@@ -260,17 +253,40 @@ class IndexedActivity:
 
 
 # ---------------------------------------------------------------------------
-# Stub data store (replace with real DB / Horizon indexer in production)
+# Repository layer — data access only, no business logic
 # ---------------------------------------------------------------------------
-_CAMPAIGNS: list[Campaign] = [
-    Campaign("c1", "Open-Source Wallet", "tech", 50_000, 120, time.time() - 86400),
-    Campaign("c2", "Community Garden", "environment", 20_000, 45, time.time() - 3600),
-    Campaign("c3", "Stellar SDK Docs", "tech", 80_000, 200, time.time() - 172800),
-    Campaign("c4", "Local Music Festival", "arts", 15_000, 30, time.time() - 7200),
-    Campaign("c5", "Solar Panels for Schools", "environment", 120_000, 300, time.time() - 43200),
-]
+class CampaignRepository(Protocol):
+    def list_campaigns(self) -> list[Campaign]: ...
 
-_ACTIVITY: dict[str, IndexedActivity] = {}
+    def get_activity(self, wallet: str) -> Optional[IndexedActivity]: ...
+
+
+class InMemoryCampaignRepository:
+    """Stub data store (replace with real DB / Horizon indexer in production)."""
+
+    def __init__(
+        self,
+        campaigns: Optional[list[Campaign]] = None,
+        activity: Optional[dict[str, IndexedActivity]] = None,
+    ) -> None:
+        self._campaigns: list[Campaign] = campaigns if campaigns is not None else _default_campaigns()
+        self._activity: dict[str, IndexedActivity] = activity if activity is not None else {}
+
+    def list_campaigns(self) -> list[Campaign]:
+        return list(self._campaigns)
+
+    def get_activity(self, wallet: str) -> Optional[IndexedActivity]:
+        return self._activity.get(wallet)
+
+
+def _default_campaigns() -> list[Campaign]:
+    return [
+        Campaign("c1", "Open-Source Wallet", "tech", 50_000, 120, time.time() - 86400),
+        Campaign("c2", "Community Garden", "environment", 20_000, 45, time.time() - 3600),
+        Campaign("c3", "Stellar SDK Docs", "tech", 80_000, 200, time.time() - 172800),
+        Campaign("c4", "Local Music Festival", "arts", 15_000, 30, time.time() - 7200),
+        Campaign("c5", "Solar Panels for Schools", "environment", 120_000, 300, time.time() - 43200),
+    ]
 
 
 # ---------------------------------------------------------------------------
@@ -291,37 +307,98 @@ def _personalised_score(c: Campaign, activity: IndexedActivity) -> float:
     return 0.0 if already_contributed else base * category_boost
 
 
-def _recommend(wallet: Optional[str], limit: int) -> list[dict]:
-    activity = _ACTIVITY.get(wallet) if wallet else None
+# ---------------------------------------------------------------------------
+# Service layer — business logic, dependencies injected via constructor
+# ---------------------------------------------------------------------------
+class RecommendationService:
+    """Computes and caches ranked campaign recommendations."""
 
-    # Compute each campaign's score exactly once per request and reuse it for
-    # sorting, filtering, and the output payload — previously
-    # _personalised_score()/_trending_score() was called three separate times
-    # per campaign (once for each of those three uses).
-    if activity:
-        # Log the resolved activity record's wallet (not just the raw query
-        # param) for auditability — it's the key that actually drove scoring.
-        log.debug("personalising_recommendations", wallet=activity.wallet)
-        scores = {c.id: _personalised_score(c, activity) for c in _CAMPAIGNS}
-    else:
-        scores = {c.id: _trending_score(c) for c in _CAMPAIGNS}
+    def __init__(
+        self,
+        repository: CampaignRepository,
+        cache: Optional[TTLCache] = None,
+        logger: Optional[structlog.BoundLogger] = None,
+    ) -> None:
+        self._repository = repository
+        self._cache = cache if cache is not None else TTLCache()
+        self._log = logger if logger is not None else log
 
-    scored = sorted(_CAMPAIGNS, key=lambda c: scores[c.id], reverse=True)
-    if activity:
-        # Exclude campaigns the wallet has already contributed to (score == 0).
-        scored = [c for c in scored if scores[c.id] > 0.0]
+    def recommend(self, wallet: Optional[str], limit: int) -> list[dict]:
+        campaigns = self._repository.list_campaigns()
+        activity = self._repository.get_activity(wallet) if wallet else None
 
-    return [
-        {
-            "campaign_id": c.id,
-            "title": c.title,
-            "category": c.category,
-            "total_raised": c.total_raised,
-            "contributor_count": c.contributor_count,
-            "score": round(scores[c.id], 4),
+        # Compute each campaign's score exactly once per request and reuse it
+        # for sorting, filtering, and the output payload.
+        if activity:
+            # Log the resolved activity record's wallet (not just the raw query
+            # param) for auditability — it's the key that actually drove scoring.
+            self._log.debug("personalising_recommendations", wallet=activity.wallet)
+            scores = {c.id: _personalised_score(c, activity) for c in campaigns}
+        else:
+            scores = {c.id: _trending_score(c) for c in campaigns}
+
+        scored = sorted(campaigns, key=lambda c: scores[c.id], reverse=True)
+        if activity:
+            # Exclude campaigns the wallet has already contributed to (score == 0).
+            scored = [c for c in scored if scores[c.id] > 0.0]
+
+        return [
+            {
+                "campaign_id": c.id,
+                "title": c.title,
+                "category": c.category,
+                "total_raised": c.total_raised,
+                "contributor_count": c.contributor_count,
+                "score": round(scores[c.id], 4),
+            }
+            for c in scored[:limit]
+        ]
+
+    def is_personalised(self, wallet: Optional[str]) -> bool:
+        return wallet is not None and self._repository.get_activity(wallet) is not None
+
+    def get_recommendations(self, wallet: Optional[str], limit: int) -> tuple[dict, bool]:
+        """Return ``(payload, cache_hit)`` for the given wallet/limit pair."""
+        cache_key = f"{wallet}:{limit}"
+        cached = self._cache.get(cache_key)
+        if cached is not None:
+            self._log.debug("recommendations_cache_hit", wallet=wallet, limit=limit)
+            return cached, True  # type: ignore[return-value]
+
+        self._log.info(
+            "recommendations_requested",
+            wallet=wallet,
+            limit=limit,
+            personalised=self.is_personalised(wallet),
+        )
+
+        recommendations = self.recommend(wallet, limit)
+        payload = {
+            "wallet": wallet,
+            "personalised": self.is_personalised(wallet),
+            "recommendations": recommendations,
+            "cached_at": time.time(),
         }
-        for c in scored[:limit]
-    ]
+        self._cache.set(cache_key, payload)
+
+        self._log.info(
+            "recommendations_returned",
+            wallet=wallet,
+            count=len(recommendations),
+            personalised=payload["personalised"],
+        )
+
+        return payload, False
+
+
+#: Default service instance wired with the in-memory repository. Route handlers
+#: depend on this module-level instance; tests construct their own service.
+_service = RecommendationService(repository=InMemoryCampaignRepository())
+
+
+def get_service() -> RecommendationService:
+    """FastAPI dependency provider for the recommendation service."""
+    return _service
 
 
 # ---------------------------------------------------------------------------
@@ -351,6 +428,7 @@ def readyz() -> dict:
 def get_recommendations(
     wallet: Optional[str] = Query(None, description="Stellar wallet address for personalisation"),
     limit: int = Query(5, ge=1, le=20, description="Maximum number of recommendations"),
+    service: RecommendationService = Depends(get_service),
 ) -> JSONResponse:
     """
     Return ranked campaign recommendations.
@@ -366,41 +444,13 @@ def get_recommendations(
     Error responses follow the standard error envelope from error_schema.py:
         { "error": { "code": "...", "message": "...", "detail": "..." } }
     """
-    cache_key = f"{wallet}:{limit}"
-    cached = _cache_get(cache_key)
-    if cached is not None:
-        log.debug("recommendations_cache_hit", wallet=wallet, limit=limit)
-        return JSONResponse(content=cached, headers={"X-Cache": "HIT"})
-
-    log.info(
-        "recommendations_requested",
-        wallet=wallet,
-        limit=limit,
-        personalised=wallet in _ACTIVITY if wallet else False,
-    )
-
     try:
-        recommendations = _recommend(wallet, limit)
+        payload, cache_hit = service.get_recommendations(wallet, limit)
     except Exception as exc:
         log.error("recommendations_scoring_failed", wallet=wallet, limit=limit, error=str(exc))
         return internal_error(
             "Failed to compute recommendations",
-            detail=str(exc) if __import__("os").getenv("LOG_FORMAT") != "json" else None,
+            detail=str(exc) if os.getenv("LOG_FORMAT") != "json" else None,
         )
 
-    payload = {
-        "wallet": wallet,
-        "personalised": wallet is not None and wallet in _ACTIVITY,
-        "recommendations": recommendations,
-        "cached_at": time.time(),
-    }
-    _cache_set(cache_key, payload)
-
-    log.info(
-        "recommendations_returned",
-        wallet=wallet,
-        count=len(recommendations),
-        personalised=payload["personalised"],
-    )
-
-    return JSONResponse(content=payload, headers={"X-Cache": "MISS"})
+    return JSONResponse(content=payload, headers={"X-Cache": "HIT" if cache_hit else "MISS"})

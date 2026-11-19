@@ -33,9 +33,28 @@ clear_all()                 – reset all stores (used in tests only)
 
 from __future__ import annotations
 
+import logging
+import time
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Optional
+from typing import Callable, Optional, TypeVar
+
+logger = logging.getLogger(__name__)
+
+_T = TypeVar("_T")
+
+# Queries slower than this (in seconds) are logged for profiling (#1685).
+SLOW_QUERY_THRESHOLD_SECONDS: float = 0.05
+
+
+def _profile_query(name: str, fn: Callable[[], _T]) -> _T:
+    """Run a read query, logging its duration when it exceeds the threshold."""
+    started = time.perf_counter()
+    result = fn()
+    elapsed = time.perf_counter() - started
+    if elapsed >= SLOW_QUERY_THRESHOLD_SECONDS:
+        logger.warning("slow query %s took %.4fs", name, elapsed)
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -135,18 +154,18 @@ def next_flag_id() -> str:
 # ---------------------------------------------------------------------------
 
 def get_contributions() -> list[ContributionEvent]:
-    """Return the full list of stored contribution events."""
-    return _CONTRIBUTIONS
+    """Return a copy of the stored contribution events (never the live list)."""
+    return _profile_query("get_contributions", lambda: list(_CONTRIBUTIONS))
 
 
 def get_refunds() -> list[RefundEvent]:
-    """Return the full list of stored refund events."""
-    return _REFUNDS
+    """Return a copy of the stored refund events (never the live list)."""
+    return _profile_query("get_refunds", lambda: list(_REFUNDS))
 
 
 def get_campaign_records() -> list[CampaignRecord]:
-    """Return the full list of stored campaign records."""
-    return _CAMPAIGN_RECORDS
+    """Return a copy of the stored campaign records (never the live list)."""
+    return _profile_query("get_campaign_records", lambda: list(_CAMPAIGN_RECORDS))
 
 
 def get_flags(
@@ -167,17 +186,20 @@ def get_flags(
     limit:
         Maximum number of flags to return (newest first).
     """
-    items: list[Flag] = list(_QUEUE)
-    if reviewed is not None:
-        items = [f for f in items if f.reviewed == reviewed]
-    if reason is not None:
-        items = [f for f in items if f.reason == reason]
-    return items[-limit:]
+    def _query() -> list[Flag]:
+        items: list[Flag] = list(_QUEUE)
+        if reviewed is not None:
+            items = [f for f in items if f.reviewed == reviewed]
+        if reason is not None:
+            items = [f for f in items if f.reason == reason]
+        return items[-limit:]
+
+    return _profile_query("get_flags", _query)
 
 
 def total_flag_count() -> int:
     """Return the total number of flags ever enqueued."""
-    return len(_QUEUE)
+    return _profile_query("total_flag_count", lambda: len(_QUEUE))
 
 
 def mark_flag_reviewed(flag_id: str) -> bool:
@@ -186,11 +208,14 @@ def mark_flag_reviewed(flag_id: str) -> bool:
 
     Returns ``True`` if the flag was found and updated, ``False`` otherwise.
     """
-    for flag in _QUEUE:
-        if flag.id == flag_id:
-            flag.reviewed = True
-            return True
-    return False
+    def _update() -> bool:
+        for flag in _QUEUE:
+            if flag.id == flag_id:
+                flag.reviewed = True
+                return True
+        return False
+
+    return _profile_query("mark_flag_reviewed", _update)
 
 
 # ---------------------------------------------------------------------------

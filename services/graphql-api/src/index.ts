@@ -113,6 +113,8 @@ async function startServer() {
 
     app.use(cors(corsOptions));
     app.use(express.json({ limit: "10mb" }));
+    // Request-ID middleware must run before any handler that logs so every
+    // log line emitted for a request carries its trace_id.
     app.use(requestIdMiddleware);
 
     // Health check endpoint
@@ -186,6 +188,10 @@ async function startServer() {
 
     // Metrics endpoint
     app.get("/metrics", async (req, res) => {
+      const traceId = resolveTraceId(
+        req.headers as Record<string, string | string[] | undefined>,
+      );
+      const log = requestLogger(traceId);
       try {
         const cacheStats = await cacheService.getStats();
         res.json({
@@ -194,6 +200,7 @@ async function startServer() {
           environment: NODE_ENV,
         });
       } catch (error) {
+        log.error({ err: error }, "Failed to get metrics");
         res.status(500).json({ error: "Failed to get metrics" });
       }
     });
@@ -240,7 +247,13 @@ async function startServer() {
             const document = parse(query);
             queryCostAnalyzer.validateQueryCost(document);
           } catch (error: any) {
-            logger.warn({ err: error.message }, "Query cost validation failed");
+            const traceId = resolveTraceId(
+              req.headers as Record<string, string | string[] | undefined>,
+            );
+            requestLogger(traceId).warn(
+              { err: error.message },
+              "Query cost validation failed",
+            );
             // Don't block the request, just log it. The query will be processed.
             // In production, you might want to return an error here:
             // return res.status(400).json({ error: error.message });
@@ -332,7 +345,10 @@ async function startServer() {
         res: express.Response,
         _next: express.NextFunction,
       ) => {
-        logger.error({ err }, "Unhandled request error");
+        const traceId = resolveTraceId(
+          req.headers as Record<string, string | string[] | undefined>,
+        );
+        requestLogger(traceId).error({ err }, "Unhandled request error");
 
         if (err.message?.includes("rate limit")) {
           return res.status(429).json({

@@ -1,15 +1,15 @@
 import "dotenv/config";
 import express, { Express } from "express";
-import { createLogger } from "@fund-my-cause/shared-utils";
+import {
+  buildPage,
+  createLogger,
+  resolvePaginationArgs,
+  CursorDecodeError,
+} from "@fund-my-cause/shared-utils";
 import { SorobanRPCClient } from "./rpc-client.js";
 import { HealthChecker } from "./health-checker.js";
 import { EventStore } from "./event-store.js";
 import { createEventDispatcher } from "./handlers/index.js";
-import {
-  buildPage,
-  resolvePaginationArgs,
-  CursorDecodeError,
-} from "@fund-my-cause/shared-utils";
 
 // Environment variables
 const PORT = parseInt(process.env.PORT ?? "3001", 10);
@@ -99,6 +99,13 @@ async function startIndexer(): Promise<void> {
   // Stream events
   logger.info("Streaming events from Soroban RPC");
   for await (const events of rpcClient.streamEvents()) {
+    // Bind a request/trace ID for this batch so every log line emitted while
+    // processing it (including handler lines) can be correlated (#1683).
+    const batchLogger = logger.child({
+      requestId: events[0]?.id ?? `batch-${Date.now()}`,
+      eventCount: events.length,
+    });
+
     try {
       // Route events to domain handlers via the dispatcher (#896).
       // Each handler stores events and emits domain-specific log lines.
@@ -111,9 +118,9 @@ async function startIndexer(): Promise<void> {
       }
 
       // Log batch
-      logger.debug({ eventCount: events.length }, "Ingested events");
+      batchLogger.debug("Ingested events");
     } catch (error) {
-      logger.error(
+      batchLogger.error(
         { error: error instanceof Error ? error.message : String(error) },
         "Error processing events",
       );

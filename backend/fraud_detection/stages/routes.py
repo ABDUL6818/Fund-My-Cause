@@ -14,27 +14,15 @@ import structlog
 from fastapi import BackgroundTasks, Request
 from fastapi.responses import JSONResponse
 
-from error_schema import bad_request, not_found, unprocessable_entity
-from repository import (
-    ContributionEvent,
-    FlagReason,
-    get_flags,
-    mark_flag_reviewed,
-    total_flag_count,
-)
+from error_schema import not_found
+from repository import FlagReason, get_flags, mark_flag_reviewed, total_flag_count
 from scoring import run_full_scan
 
-from stages.idempotency import IDEMPOTENCY_KEY_HEADER, IDEMPOTENCY_KEY_MAX_LEN, IdempotencyStore
-from stages.scoring_worker import ContributionPayload, scoring_queue, get_metrics
+from stages.contribution_service import ContributionService
+from stages.idempotency import IDEMPOTENCY_KEY_HEADER
+from stages.scoring_worker import get_metrics
 
 log: structlog.BoundLogger = structlog.get_logger("fraud_detection")
-
-# Module-level idempotency store — shared singleton for this process.
-_IDEMPOTENCY_STORE = IdempotencyStore()
-
-# Contributions list reference (kept here for direct append in the handler).
-import repository as _repo
-_CONTRIBUTIONS = _repo._CONTRIBUTIONS
 
 
 def healthz() -> dict:
@@ -45,42 +33,20 @@ def readyz() -> dict:
     return {"ready": True, "checks": {"service": "ready", "queue": "ok"}, "timestamp": time.time()}
 
 
-async def ingest_contribution(request: Request) -> JSONResponse:
-    """Accept a contribution, apply idempotency, enqueue for scoring."""
-    idempotency_key: Optional[str] = request.headers.get(IDEMPOTENCY_KEY_HEADER)
-    if idempotency_key is not None:
-        if len(idempotency_key) > IDEMPOTENCY_KEY_MAX_LEN:
-            log.warning("contributions_idempotency_key_too_long", key_length=len(idempotency_key))
-            return bad_request("Idempotency-Key exceeds maximum length")
-        cached = _IDEMPOTENCY_STORE.get(idempotency_key)
-        if cached is not None:
-            log.info("contributions_duplicate_rejected", idempotency_key=idempotency_key)
-            return JSONResponse(status_code=202, content=cached)
+def make_ingest_contribution(service: ContributionService):
+    """Build the ingest controller bound to an injected ContributionService."""
 
-    try:
-        body = await request.json()
-        payload = ContributionPayload(**body)
-    except Exception as exc:
-        log.warning("contributions_ingest_invalid_payload", error=str(exc))
-        return unprocessable_entity("invalid payload")
+    async def ingest_contribution(request: Request) -> JSONResponse:
+        """Accept a contribution; delegate all business logic to the service."""
+        idempotency_key: Optional[str] = request.headers.get(IDEMPOTENCY_KEY_HEADER)
+        try:
+            body = await request.json()
+        except Exception as exc:
+            log.warning("contributions_ingest_invalid_payload", error=str(exc))
+            return service.invalid_payload_response()
+        return service.ingest(body, idempotency_key=idempotency_key)
 
-    queue_depth = scoring_queue.qsize()
-    log.info("contribution_queued", campaign_id=payload.campaignId, contributor=payload.contributor,
-             amount=payload.amount, tx_hash=payload.transactionHash, queue_depth=queue_depth)
-
-    _CONTRIBUTIONS.append(ContributionEvent(
-        campaign_id=payload.campaignId, wallet=payload.contributor,
-        amount=int(payload.amount) if payload.amount.isdigit() else 0,
-        timestamp=payload.timestamp,
-    ))
-    log.debug("contribution_stored", store_size=len(_CONTRIBUTIONS))
-
-    response_body = {"status": "accepted"}
-    if idempotency_key is not None:
-        _IDEMPOTENCY_STORE.set(idempotency_key, response_body)
-        log.debug("contributions_idempotency_key_stored", idempotency_key=idempotency_key)
-
-    return JSONResponse(status_code=202, content=response_body)
+    return ingest_contribution
 
 
 def trigger_scan(background_tasks: BackgroundTasks) -> dict:

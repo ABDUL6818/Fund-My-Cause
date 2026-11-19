@@ -28,6 +28,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   in `src/refund.rs` and `src/withdraw.rs` (AlreadyWithdrawn, GoalNotReached, soft_cap path,
   partial-release proportional refund, record_release accumulation).
 
+### Changed
+- **#1682 Backend layered architecture** — route handlers in `backend/` are now thin
+  controllers; business logic moved into service modules and all persistence into
+  repository modules, with dependencies injected at app startup (no module-level
+  singletons in handlers). Public request/response behaviour is unchanged.
+- **#1683 Structured logging with request IDs** — all backend services now log through
+  pino (Node) / structlog (Python) with a per-request `requestId` bound to every log
+  line; all remaining `console.*` calls in `backend/` were removed.
+- **#1685 Database query optimisation** — added indexes backing the hot query paths
+  (campaign lookup by creator/state, contributions by campaign/contributor, event
+  lookups by contract/type) via new migrations; slow-query profiling results are
+  recorded in the PR.
+
 ### Removed
 - **Deprecated `/health` endpoint** — removed the legacy `GET /health` route from
   `backend/recommendations/service.py` and `backend/fraud_detection/pipeline.py`. It was a
@@ -35,6 +48,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   no client called `/health` specifically, only its own test suite. Associated
   `test_health` tests were removed, and `tests_error_schema.py` now asserts against
   `/healthz` instead.
+- **#1684 Unused fraud-detection endpoints** — removed the following routes from
+  `backend/fraud_detection/pipeline.py`; none had callers in `apps/interface`, `sdks/js`
+  or the indexer, and each is superseded by `/healthz`/`/readyz` or the GraphQL API:
+  - `GET /fraud/health` — duplicate of `GET /healthz`.
+  - `GET /fraud/ready` — duplicate of `GET /readyz`.
+  - `GET /fraud/version` — build metadata already exposed by `/healthz`.
+  - `POST /fraud/score/legacy` — superseded by `POST /fraud/score` (identical payload,
+    no remaining callers).
+  - `GET /fraud/rules/deprecated` — returned an empty stub list; no client usage.
+- **#1684 Unused GraphQL schema surface** — removed from `services/graphql-api`; no
+  queries or fragments in `apps/interface` or `sdks/js` referenced them, and the
+  underlying data is available through the retained resolvers:
+  - `Query.legacyCampaigns` resolver + `LegacyCampaign` type — superseded by
+    `Query.campaigns` / `Campaign`.
+  - `Query.fraudScoreLegacy` resolver — superseded by `Query.fraudScore`.
+  - `Campaign.deprecatedContributorCount` field — superseded by `Campaign.contributorCount`.
+  - `Mutation.updateCampaignLegacy` mutation — superseded by `Mutation.updateCampaign`.
+- **#1684 Other unused backend endpoints** — removed `GET /metrics/legacy` from
+  `services/monitoring-service` (superseded by `GET /metrics`) and
+  `GET /recommendations/v0` from `backend/recommendations/service.py` (superseded by
+  `GET /recommendations`). Associated tests were deleted or retargeted at the
+  replacement endpoints.
 
 ### Added
 - **#893 REST endpoint audit** — `services/graphql-api/docs/rest-endpoints.md` documents

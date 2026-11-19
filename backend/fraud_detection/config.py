@@ -18,13 +18,12 @@ import sys
 import os
 from typing import Optional
 
-import structlog
-
 # Add shared directory to path for imports
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "shared"))
 from config_validator import ConfigValidator, ConfigRule, get_env_int, get_env_bool  # noqa: E402
+from structured_logger import get_logger  # noqa: E402
 
-logger = structlog.get_logger(__name__)
+logger = get_logger(__name__)
 
 
 class FraudDetectionConfig:
