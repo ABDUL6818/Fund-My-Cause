@@ -23,4 +23,3 @@ export interface CampaignImageHints {
  * Falls back to the base `Campaign` type when hints are absent.
  */
 export type CampaignWithImageHints = Campaign & CampaignImageHints;
-</｜｜DSML｜｜ parameter>

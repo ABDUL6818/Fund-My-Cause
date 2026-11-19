@@ -1,6 +1,6 @@
-import { useState, useEffect } from "react";
-import { HORIZON_URL } from "@/lib/constants";
-import { fetchWithRetry } from "@stellar/shared-utils";
+import { useQuery } from "@tanstack/react-query";
+import { getHorizonServer } from "@/lib/stellar";
+import { queryKeys } from "@/lib/queryKeys";
 
 /**
  * Checks whether a Stellar account is funded (exists on the network).
@@ -8,36 +8,21 @@ import { fetchWithRetry } from "@stellar/shared-utils";
  * @returns {{ exists: boolean, loading: boolean }}
  */
 export function useAccountExists(address: string | null): { exists: boolean; loading: boolean } {
-  const [exists, setExists] = useState(false);
-  const [loading, setLoading] = useState(false);
+  const { data, isLoading } = useQuery({
+    queryKey: queryKeys.accountExists(address ?? ""),
+    queryFn: async () => {
+      if (!address) return false;
+      try {
+        await getHorizonServer().accounts().accountId(address).call();
+        return true;
+      } catch {
+        return false;
+      }
+    },
+    enabled: !!address,
+    staleTime: 30_000,
+    retry: 1,
+  });
 
-  useEffect(() => {
-    if (!address) {
-      setExists(false);
-      setLoading(false);
-      return;
-    }
-
-    const controller = new AbortController();
-    setLoading(true);
-
-    fetchWithRetry(`${HORIZON_URL}/accounts/${address}`, {
-      signal: controller.signal,
-    })
-      .then((res) => {
-        if (!controller.signal.aborted) setExists(res.ok);
-      })
-      .catch(() => {
-        if (!controller.signal.aborted) setExists(false);
-      })
-      .finally(() => {
-        if (!controller.signal.aborted) setLoading(false);
-      });
-
-    return () => {
-      controller.abort();
-    };
-  }, [address]);
-
-  return { exists, loading };
+  return { exists: !!address && !!data, loading: !!address && isLoading };
 }

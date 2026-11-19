@@ -346,11 +346,3 @@ export type {
   ContributionsQuery,
   ContributionsQueryVariables,
 } from "./generated";
-export type {
-  Campaign,
-  CampaignStatus as GraphQLCampaignStatus,
-  Contributor,
-  Milestone,
-  MilestoneStatus,
-  CampaignUpdate,
-} from "./generated";

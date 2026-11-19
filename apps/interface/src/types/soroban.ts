@@ -10,3 +10,9 @@ export type {
   InitializeParams,
   CampaignData,
 } from "@fund-my-cause/types";
+
+export type {
+  StellarClient,
+  StellarClientConfig,
+  SorobanRpcClient,
+} from "@/lib/stellar";

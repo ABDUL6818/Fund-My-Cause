@@ -32,18 +32,37 @@ export function getStaticCampaignIds(): string[] {
   return [...CONTRACT_IDS];
 }
 
-let horizonServer: Horizon.Server | null = null;
+/**
+ * Lazily-initialized singleton holding the shared Stellar/Soroban clients.
+ * All modules must obtain clients through this object (via the getters below)
+ * rather than constructing `new Horizon.Server(...)`/`new SorobanRpc.Server(...)`
+ * themselves.
+ */
+const stellarClients: {
+  horizon: Horizon.Server | null;
+  rpc: SorobanRpc.Server | null;
+} = {
+  horizon: null,
+  rpc: null,
+};
 
 /** Returns the shared Horizon server instance, constructed once per client lifetime. */
 export function getHorizonServer(): Horizon.Server {
-  horizonServer ??= new Horizon.Server(HORIZON_URL);
-  return horizonServer;
+  stellarClients.horizon ??= new Horizon.Server(HORIZON_URL);
+  return stellarClients.horizon;
 }
-
-let rpcServer: SorobanRpc.Server | null = null;
 
 /** Returns the shared Soroban RPC server instance, constructed once per client lifetime. */
 export function getRpcServer(): SorobanRpc.Server {
-  rpcServer ??= new SorobanRpc.Server(RPC_URL);
-  return rpcServer;
+  stellarClients.rpc ??= new SorobanRpc.Server(RPC_URL);
+  return stellarClients.rpc;
+}
+
+/**
+ * Resets the memoized clients. Intended for tests only so singleton identity
+ * and configuration can be verified in isolation.
+ */
+export function resetStellarClients(): void {
+  stellarClients.horizon = null;
+  stellarClients.rpc = null;
 }

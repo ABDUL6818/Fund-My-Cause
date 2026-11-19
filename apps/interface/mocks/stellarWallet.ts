@@ -79,6 +79,34 @@ export interface WalletProvider {
   ): () => void;
 }
 
+/**
+ * Shape of the value returned by the `useWallet` hook / wallet context.
+ *
+ * Mirrors the public surface of `apps/interface/src/hooks/useWallet.ts` so
+ * tests can render components against a mocked context without importing the
+ * real hook (and therefore without touching `@stellar/freighter-api`).
+ */
+export interface WalletContextValue {
+  /** Current connection state. */
+  state: WalletProviderState;
+  /** Connected public key, or `null` when disconnected. */
+  publicKey: string | null;
+  /** `true` while a connect/disconnect/sign operation is in flight. */
+  isConnecting: boolean;
+  /** `true` when `state === "connected"` and a public key is present. */
+  isConnected: boolean;
+  /** Last error message, if any. */
+  error: string | null;
+  /** Connects the wallet and resolves with the public key. */
+  connect(): Promise<string>;
+  /** Disconnects the wallet. */
+  disconnect(): Promise<void>;
+  /** Signs a transaction XDR, resolving with the signed XDR. */
+  signTransaction(xdr: string): Promise<string>;
+  /** Clears the last error. */
+  clearError(): void;
+}
+
 // ── Configuration types ───────────────────────────────────────────────────────
 
 /**
@@ -138,6 +166,32 @@ export interface MockWalletProviderConfig {
 
   /** Network name returned by `getNetworkDetails()`. @default "TESTNET" */
   networkName?: string;
+
+  /**
+   * Artificial delay (ms) per async operation.
+   * @default 0
+   */
+  delay?: number;
+}
+
+/**
+ * Configuration options for {@link createMockWalletContextValue}.
+ */
+export interface MockWalletContextConfig {
+  /** @default "idle" */
+  initialState?: WalletProviderState;
+
+  /** Public key when connected. @default MOCK_PUBLIC_KEY */
+  publicKey?: string;
+
+  /** If set, `connect()` rejects with this message. */
+  connectError?: string;
+
+  /** If set, `signTransaction()` rejects with this message. */
+  signError?: string;
+
+  /** If set, `disconnect()` rejects with this message. */
+  disconnectError?: string;
 
   /**
    * Artificial delay (ms) per async operation.
@@ -327,5 +381,124 @@ export function createMockWalletProvider(
     signTransaction,
     getNetworkDetails,
     onStateChange,
+  };
+}
+
+// ── useWallet context value mock ──────────────────────────────────────────────
+
+/**
+ * Creates a mock value implementing {@link WalletContextValue}, suitable for
+ * wrapping components in the wallet context provider during tests.
+ *
+ * Tracks `state`, `publicKey`, `isConnecting` and `error` internally, mirroring
+ * the real `useWallet` hook so components that consume the wallet context can
+ * be tested without a browser extension.
+ *
+ * @example
+ * ```ts
+ * const wallet = createMockWalletContextValue();
+ * expect(wallet.isConnected).toBe(false);
+ * await wallet.connect();
+ * expect(wallet.isConnected).toBe(true);
+ * expect(wallet.publicKey).toBe(MOCK_PUBLIC_KEY);
+ * ```
+ */
+export function createMockWalletContextValue(
+  config: MockWalletContextConfig = {},
+): WalletContextValue & {
+  connect: jest.Mock;
+  disconnect: jest.Mock;
+  signTransaction: jest.Mock;
+  clearError: jest.Mock;
+} {
+  const {
+    initialState = "idle",
+    publicKey: configPublicKey = MOCK_PUBLIC_KEY,
+    connectError,
+    signError,
+    disconnectError,
+    delay = 0,
+  } = config;
+
+  let _state: WalletProviderState = initialState;
+  let _publicKey: string | null =
+    initialState === "connected" ? configPublicKey : null;
+  let _isConnecting = false;
+  let _error: string | null = null;
+
+  const maybeDelay = (): Promise<void> =>
+    delay > 0 ? sleep(delay) : Promise.resolve();
+
+  const connect = jest.fn(async (): Promise<string> => {
+    _isConnecting = true;
+    _error = null;
+    try {
+      await maybeDelay();
+      if (connectError) throw new Error(connectError);
+      _state = "connected";
+      _publicKey = configPublicKey;
+      return configPublicKey;
+    } catch (err) {
+      _state = "error";
+      _publicKey = null;
+      _error = err instanceof Error ? err.message : String(err);
+      throw err;
+    } finally {
+      _isConnecting = false;
+    }
+  });
+
+  const disconnect = jest.fn(async (): Promise<void> => {
+    _isConnecting = true;
+    _error = null;
+    try {
+      await maybeDelay();
+      if (disconnectError) throw new Error(disconnectError);
+      _state = "idle";
+      _publicKey = null;
+    } catch (err) {
+      _error = err instanceof Error ? err.message : String(err);
+      throw err;
+    } finally {
+      _isConnecting = false;
+    }
+  });
+
+  const signTransaction = jest.fn(async (xdr: string): Promise<string> => {
+    _error = null;
+    try {
+      await maybeDelay();
+      if (signError) throw new Error(signError);
+      return fakeSign(xdr);
+    } catch (err) {
+      _error = err instanceof Error ? err.message : String(err);
+      throw err;
+    }
+  });
+
+  const clearError = jest.fn((): void => {
+    _error = null;
+  });
+
+  return {
+    get state() {
+      return _state;
+    },
+    get publicKey() {
+      return _publicKey;
+    },
+    get isConnecting() {
+      return _isConnecting;
+    },
+    get isConnected() {
+      return _state === "connected" && _publicKey !== null;
+    },
+    get error() {
+      return _error;
+    },
+    connect,
+    disconnect,
+    signTransaction,
+    clearError,
   };
 }

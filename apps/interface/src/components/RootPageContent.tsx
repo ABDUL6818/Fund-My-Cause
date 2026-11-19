@@ -4,6 +4,7 @@ import React from "react";
 import dynamic from "next/dynamic";
 import { ErrorBoundary } from "@fund-my-cause/components";
 import { DevErrorSimulator } from "@/components/DevErrorSimulator";
+import { WalletProvider } from "@/context/WalletContext";
 
 const CampaignCreate = dynamic(
   () =>
@@ -42,12 +43,13 @@ interface RootPageContentProps {
 export function RootPageContent({ children }: RootPageContentProps) {
   return (
     <ErrorBoundary level="page">
-      <DevErrorSimulator />
-      {children}
+      <WalletProvider>
+        <DevErrorSimulator />
+        {children}
+      </WalletProvider>
     </ErrorBoundary>
   );
 }
 
 export { CampaignCreate, Dashboard };
 export default RootPageContent;
-</｜｜DSML｜｜ parameter>

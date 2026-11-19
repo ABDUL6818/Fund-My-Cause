@@ -1,16 +1,57 @@
 import "@testing-library/jest-dom/vitest";
 import { expect, afterEach, vi } from "vitest";
-import { cleanup } from "@testing-library/react";
 import * as matchers from "jest-axe/extend-expect";
+import { cleanup } from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import React from "react";
 
 // Register jest-axe matchers (e.g. toHaveNoViolations) for accessibility tests.
 expect.extend(matchers);
 
-// Ensure the DOM is cleaned up between tests so focus/tab-order assertions
-// do not leak state across test cases.
+// Ensure the DOM is cleaned up between tests when using @testing-library/react.
 afterEach(() => {
   cleanup();
 });
+
+// Provide a fresh QueryClient for each test to avoid cross-test cache leakage.
+export function createTestQueryClient(): QueryClient {
+  return new QueryClient({
+    defaultOptions: {
+      queries: {
+        retry: false,
+        gcTime: 0,
+        staleTime: 0,
+      },
+      mutations: {
+        retry: false,
+      },
+    },
+  });
+}
+
+// Wrapper component that supplies a QueryClientProvider for hook tests.
+export function createQueryClientWrapper(
+  queryClient: QueryClient = createTestQueryClient(),
+) {
+  return function QueryClientWrapper({
+    children,
+  }: {
+    children: React.ReactNode;
+  }) {
+    return React.createElement(
+      QueryClientProvider,
+      { client: queryClient },
+      children,
+    );
+  };
+}
+
+// Default wrapper usable directly with render options.
+export const QueryClientWrapper = createQueryClientWrapper();
+
+// Silence noisy console errors that are expected in negative-path tests
+// unless a test explicitly opts in to asserting on them.
+vi.spyOn(console, "error").mockImplementation(() => {});
 
 // Polyfill matchMedia for components that rely on media queries
 // (e.g. reduced-motion / contrast preferences used in keyboard & a11y tests).

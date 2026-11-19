@@ -13,7 +13,7 @@ export type {
 } from "@shared/hooks";
 
 // Wallet hook — single source of wallet state for all components
-export { useWallet } from "@shared/hooks";
+export { useWallet } from "./useWallet";
 
 // Domain hooks
 export {

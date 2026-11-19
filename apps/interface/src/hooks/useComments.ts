@@ -2,6 +2,7 @@ import { useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import type { Comment, CommentInput } from "@/types/comment";
 import { QUERY_KEYS } from "@/lib/queryKeys";
+import { queryDefaults } from "@/lib/queryClient";
 
 // Mock storage - in production, this would use IPFS or on-chain storage
 const COMMENTS_STORAGE_KEY = "campaign_comments";
@@ -122,6 +123,7 @@ export function useComments(campaignId: string, userAddress: string | null) {
         (c) => c.campaignId === campaignId && c.moderationStatus !== "rejected"
       );
     },
+    ...queryDefaults,
   });
 
   const addCommentMutation = useMutation({
@@ -163,6 +165,7 @@ export function useComments(campaignId: string, userAddress: string | null) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.comments(campaignId) });
     },
+    ...queryDefaults,
   });
 
   const voteMutation = useMutation({
@@ -183,6 +186,7 @@ export function useComments(campaignId: string, userAddress: string | null) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.comments(campaignId) });
     },
+    ...queryDefaults,
   });
 
   const flagMutation = useMutation({
@@ -203,6 +207,7 @@ export function useComments(campaignId: string, userAddress: string | null) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.comments(campaignId) });
     },
+    ...queryDefaults,
   });
 
   const moderateMutation = useMutation({
@@ -235,6 +240,7 @@ export function useComments(campaignId: string, userAddress: string | null) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.comments(campaignId) });
     },
+    ...queryDefaults,
   });
 
   const deleteMutation = useMutation({
@@ -251,6 +257,7 @@ export function useComments(campaignId: string, userAddress: string | null) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.comments(campaignId) });
     },
+    ...queryDefaults,
   });
 
   const addComment = useCallback(

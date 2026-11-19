@@ -1,3 +1,18 @@
+export const getRpcServer = jest.fn(() => ({
+  getAccount: jest.fn(),
+  getLatestLedger: jest.fn(),
+  simulateTransaction: jest.fn(),
+  prepareTransaction: jest.fn(),
+  sendTransaction: jest.fn(),
+  getTransaction: jest.fn(),
+}));
+
+export const getHorizonServer = jest.fn(() => ({
+  loadAccount: jest.fn(),
+  fetchBaseFee: jest.fn(),
+  submitTransaction: jest.fn(),
+}));
+
 export const getStaticCampaignIds = jest.fn(() => []);
 export const buildInitializeTx = jest.fn();
 export const buildWithdrawTx = jest.fn();
