@@ -1,30 +1,26 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
+import type { z } from "zod";
+import type { campaignFormSchema } from "@/lib/validation/campaign";
 
 const DRAFT_KEY = "fmc:campaign_draft";
 const AUTO_SAVE_INTERVAL_MS = 30_000; // 30 seconds
+const SAVED_STATUS_RESET_MS = 3_000; // 3 seconds
 
-export interface CampaignDraftData {
-  contractId: string;
-  token: string;
-  title: string;
-  description: string;
-  goal: string;
-  deadline: string;
-  minContribution: string;
-  imageUrl: string;
-  feeAddress: string;
-  feeBps: string;
-  step: number;
+/**
+ * Draft payload derived from the shared campaign form schema so the draft
+ * stays in sync with the react-hook-form based creation flow.
+ */
+export type CampaignDraftData = z.infer<typeof campaignFormSchema>;
+
+export enum DraftSaveStatus {
+  Idle = "idle",
+  Saving = "saving",
+  Saved = "saved",
+  Error = "error",
+  Conflict = "conflict",
 }
-
-export type DraftSaveStatus =
-  | "idle"
-  | "saving"
-  | "saved"
-  | "error"
-  | "conflict";
 
 interface UseCampaignDraftReturn {
   /** Whether a saved draft exists in localStorage */
@@ -47,6 +43,13 @@ interface UseCampaignDraftReturn {
   resolveConflict: (
     resolution: "keep-local" | "keep-remote",
   ) => CampaignDraftData | null;
+  /**
+   * Hydrate the form with a draft. Returns the draft values to pass to
+   * react-hook-form's `reset`, or `null` when no draft is available.
+   */
+  hydrateForm: () => CampaignDraftData | null;
+  /** Reset the draft state (form + persisted draft) after a successful deploy */
+  resetForm: () => void;
 }
 
 /**
@@ -57,7 +60,9 @@ export function useCampaignDraft(
   currentData: CampaignDraftData,
 ): UseCampaignDraftReturn {
   const [hasDraft, setHasDraft] = useState(false);
-  const [saveStatus, setSaveStatus] = useState<DraftSaveStatus>("idle");
+  const [saveStatus, setSaveStatus] = useState<DraftSaveStatus>(
+    DraftSaveStatus.Idle,
+  );
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
   const autoSaveTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const currentDataRef = useRef(currentData);
@@ -71,12 +76,7 @@ export function useCampaignDraft(
   // Check for existing draft on mount and listen for external changes
   useEffect(() => {
     const checkDraft = () => {
-      try {
-        const raw = localStorage.getItem(DRAFT_KEY);
-        setHasDraft(raw !== null);
-      } catch {
-        setHasDraft(false);
-      }
+      setHasDraft(readJsonStorage<CampaignDraftData>(DRAFT_KEY) !== null);
     };
 
     checkDraft();
@@ -87,7 +87,7 @@ export function useCampaignDraft(
         if (isSavingRef.current) return;
 
         // If another tab saved, we have a potential conflict
-        setSaveStatus("conflict");
+        setSaveStatus(DraftSaveStatus.Conflict);
         setHasDraft(true);
       }
     };
@@ -98,17 +98,17 @@ export function useCampaignDraft(
 
   const saveDraft = useCallback(
     (data: CampaignDraftData) => {
-      if (saveStatus === "conflict") return;
+      if (saveStatus === DraftSaveStatus.Conflict) return;
 
-      setSaveStatus("saving");
+      setSaveStatus(DraftSaveStatus.Saving);
       isSavingRef.current = true;
       try {
-        localStorage.setItem(DRAFT_KEY, JSON.stringify(data));
+        writeJsonStorage(DRAFT_KEY, data);
         setHasDraft(true);
         setLastSaved(new Date());
-        setSaveStatus("saved");
+        setSaveStatus(DraftSaveStatus.Saved);
       } catch {
-        setSaveStatus("error");
+        setSaveStatus(DraftSaveStatus.Error);
       } finally {
         isSavingRef.current = false;
       }
@@ -117,13 +117,7 @@ export function useCampaignDraft(
   );
 
   const loadDraft = useCallback((): CampaignDraftData | null => {
-    try {
-      const raw = localStorage.getItem(DRAFT_KEY);
-      if (!raw) return null;
-      return JSON.parse(raw) as CampaignDraftData;
-    } catch {
-      return null;
-    }
+    return readJsonStorage<CampaignDraftData>(DRAFT_KEY);
   }, []);
 
   const clearDraft = useCallback(() => {
@@ -131,11 +125,23 @@ export function useCampaignDraft(
       localStorage.removeItem(DRAFT_KEY);
       setHasDraft(false);
       setLastSaved(null);
-      setSaveStatus("idle");
+      setSaveStatus(DraftSaveStatus.Idle);
     } catch {
       // non-critical
     }
   }, []);
+
+  const hydrateForm = useCallback((): CampaignDraftData | null => {
+    const draft = loadDraft();
+    if (draft) {
+      setHasDraft(true);
+    }
+    return draft;
+  }, [loadDraft]);
+
+  const resetForm = useCallback(() => {
+    clearDraft();
+  }, [clearDraft]);
 
   const resolveConflict = useCallback(
     (resolution: "keep-local" | "keep-remote"): CampaignDraftData | null => {
@@ -145,7 +151,7 @@ export function useCampaignDraft(
       } else {
         // "keep-remote" - load the remote draft data
         const remoteDraft = loadDraft();
-        setSaveStatus("idle");
+        setSaveStatus(DraftSaveStatus.Idle);
         return remoteDraft;
       }
     },
@@ -155,7 +161,7 @@ export function useCampaignDraft(
   // Auto-save every 30 seconds — only when the form has meaningful content
   useEffect(() => {
     autoSaveTimerRef.current = setInterval(() => {
-      if (saveStatus === "conflict") return;
+      if (saveStatus === DraftSaveStatus.Conflict) return;
 
       const data = currentDataRef.current;
       const hasContent =
@@ -178,8 +184,11 @@ export function useCampaignDraft(
 
   // Reset "saved" status back to "idle" after 3 seconds
   useEffect(() => {
-    if (saveStatus === "saved") {
-      const timer = setTimeout(() => setSaveStatus("idle"), 3000);
+    if (saveStatus === DraftSaveStatus.Saved) {
+      const timer = setTimeout(
+        () => setSaveStatus(DraftSaveStatus.Idle),
+        SAVED_STATUS_RESET_MS,
+      );
       return () => clearTimeout(timer);
     }
   }, [saveStatus]);
@@ -192,5 +201,7 @@ export function useCampaignDraft(
     saveStatus,
     lastSaved,
     resolveConflict,
+    hydrateForm,
+    resetForm,
   };
 }

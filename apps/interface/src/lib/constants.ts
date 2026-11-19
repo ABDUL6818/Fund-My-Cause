@@ -61,11 +61,61 @@ export const HORIZON_URL = requireEnv(
   process.env.NEXT_PUBLIC_HORIZON_URL,
 );
 
+// ──────────────────────────────────────────────────────────────────────────────
+// Network constants
+// ──────────────────────────────────────────────────────────────────────────────
+
+/** Supported Stellar networks. */
+export enum Network {
+  MAINNET = "mainnet",
+  TESTNET = "testnet",
+}
+
+/** Stellar network passphrases keyed by network. */
+export const NETWORK_PASSPHRASES: Record<Network, string> = {
+  [Network.MAINNET]: "Public Global Stellar Network ; September 2015",
+  [Network.TESTNET]: "Test SDF Network ; September 2015",
+};
+
 /** Human-readable network name derived from NETWORK_PASSPHRASE. */
-export const NETWORK_NAME =
-  NETWORK_PASSPHRASE === "Public Global Stellar Network ; September 2015"
-    ? "mainnet"
-    : "testnet";
+export const NETWORK_NAME: Network =
+  NETWORK_PASSPHRASE === NETWORK_PASSPHRASES[Network.MAINNET]
+    ? Network.MAINNET
+    : Network.TESTNET;
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Status constants
+// ──────────────────────────────────────────────────────────────────────────────
+
+/** Lifecycle status of a campaign. */
+export enum CampaignStatus {
+  ACTIVE = "active",
+  SUCCESSFUL = "successful",
+  FAILED = "failed",
+  CLAIMED = "claimed",
+}
+
+/** Status of a contribution. */
+export enum ContributionStatus {
+  PENDING = "pending",
+  CONFIRMED = "confirmed",
+  FAILED = "failed",
+  REFUNDED = "refunded",
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Route constants
+// ──────────────────────────────────────────────────────────────────────────────
+
+/** Application route paths. */
+export const Routes = {
+  HOME: "/",
+  CAMPAIGNS: "/campaigns",
+  CAMPAIGN_DETAIL: (id: string) => `/campaigns/${id}`,
+  PROFILE: "/profile",
+  STATUS: "/status",
+  CREATE: "/create",
+} as const;
 
 /** Application base URL for metadata and sharing */
 export const APP_BASE_URL =

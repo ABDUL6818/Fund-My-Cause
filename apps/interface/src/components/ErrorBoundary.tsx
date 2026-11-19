@@ -8,122 +8,22 @@
  * Can be used in both Client and Server components via error.tsx.
  */
 
-import React, { ReactNode } from "react";
-import { useToast } from "@/components/ToastProvider";
-
-interface ErrorBoundaryProps {
-  children: ReactNode;
-  fallback?: (error: Error, reset: () => void) => ReactNode;
-  onError?: (error: Error, info: { componentStack: string }) => void;
-  onToast?: (error: Error) => void;
-}
-
-interface ErrorBoundaryState {
-  hasError: boolean;
-  error: Error | null;
-}
-
-class ErrorBoundaryBase extends React.Component<
-  ErrorBoundaryProps,
-  ErrorBoundaryState
-> {
-  constructor(props: ErrorBoundaryProps) {
-    super(props);
-    this.state = { hasError: false, error: null };
-  }
-
-  static getDerivedStateFromError(error: Error): ErrorBoundaryState {
-    return { hasError: true, error };
-  }
-
-  componentDidCatch(error: Error, errorInfo: { componentStack: string }) {
-    if (this.props.onError) {
-      this.props.onError(error, errorInfo);
-    }
-    // Surface the error through the centralized toast API instead of an inline alert.
-    this.props.onToast?.(error);
-  }
-
-  reset = () => {
-    this.setState({ hasError: false, error: null });
-  };
-
-  render() {
-    if (this.state.hasError && this.state.error) {
-      return this.props.fallback ? (
-        this.props.fallback(this.state.error, this.reset)
-      ) : (
-        <DefaultErrorFallback error={this.state.error} reset={this.reset} />
-      );
-    }
-
-    return this.props.children;
-  }
-}
+import {
+  ErrorBoundary as SharedErrorBoundary,
+  ErrorFallback as SharedErrorFallback,
+} from "@interface/components-lib/src/ErrorBoundary";
 
 /**
- * ErrorBoundary wired to the centralized toast API (Issue #1674).
- * Caught errors are surfaced via useToast; fallback UI and onError are preserved.
+ * Thin wrapper around the shared components-lib ErrorBoundary so the
+ * interface app has a single fallback contract (Issue #1657).
  */
-export function ErrorBoundary(props: Omit<ErrorBoundaryProps, "onToast">) {
-  const { showToast } = useToast();
-
-  const handleToast = React.useCallback(
-    (error: Error) => {
-      showToast({
-        variant: "error",
-        message: error.message || "An unexpected error occurred",
-      });
-    },
-    [showToast],
-  );
-
-  return <ErrorBoundaryBase {...props} onToast={handleToast} />;
-}
+export const ErrorBoundary = SharedErrorBoundary;
 
 /**
- * Default error UI for when no custom fallback is provided
+ * Default error UI for when no custom fallback is provided.
+ * Re-exported from components-lib to avoid duplicate fallback markup.
  */
-export function DefaultErrorFallback({
-  error,
-  reset,
-}: {
-  error: Error;
-  reset: () => void;
-}) {
-  return (
-    <div
-      style={{
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
-        justifyContent: "center",
-        minHeight: "400px",
-        padding: "20px",
-        textAlign: "center",
-      }}
-    >
-      <h1>Something went wrong</h1>
-      <p style={{ color: "#666", marginBottom: "20px" }}>
-        {error.message || "An unexpected error occurred"}
-      </p>
-      <button
-        onClick={reset}
-        style={{
-          padding: "10px 20px",
-          backgroundColor: "#007bff",
-          color: "white",
-          border: "none",
-          borderRadius: "4px",
-          cursor: "pointer",
-          fontSize: "16px",
-        }}
-      >
-        Try again
-      </button>
-    </div>
-  );
-}
+export const DefaultErrorFallback = SharedErrorFallback;
 
 /**
  * Hook to use error boundary functionality in functional components via error.tsx

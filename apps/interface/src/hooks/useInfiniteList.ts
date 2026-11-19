@@ -54,7 +54,7 @@
  * ```
  */
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -252,5 +252,10 @@ export function useInfiniteList<T>(
     cursorRef.current = initialCursor;
   }, [clearRetryTimer, initialCursor]);
 
-  return { items, sentinelRef, isLoading, hasMore, error, retry, reset };
+  // Memoize the returned object so consumers (e.g. React.memo list items)
+  // are not invalidated by identity changes when nothing actually changed.
+  return useMemo(
+    () => ({ items, sentinelRef, isLoading, hasMore, error, retry, reset }),
+    [items, isLoading, hasMore, error, retry, reset],
+  );
 }

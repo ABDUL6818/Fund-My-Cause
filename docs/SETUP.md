@@ -1,6 +1,11 @@
 # Fund-My-Cause Local Development Setup Guide
 
 > **Single source of truth for onboarding and local development across all monorepo workspaces.**
+>
+> This guide consolidates the setup steps that previously lived in the root
+> `README.md` and the per-workspace READMEs (`apps/interface`, `contracts/*`,
+> `services/*`, `backend/*`). If a workspace README disagrees with this file,
+> **this file wins** — please open a PR to fix the README.
 
 Fund-My-Cause is a monorepo consisting of Soroban smart contracts, a Next.js frontend, Node.js microservices, Python scoring engines, and shared TypeScript libraries. This guide covers environment configuration, installation, contract compilation, and service startup for all components.
 
@@ -84,7 +89,7 @@ For contributors wanting to get up and running immediately with mock data:
 git clone https://github.com/Fund-My-Cause/Fund-My-Cause.git
 cd Fund-My-Cause
 
-# 2. Install monorepo dependencies
+# 2. Install monorepo dependencies (installs every workspace — see below)
 npm install
 
 # 3. Build smart contracts into WASM (crowdfund crate — see Root Scripts Reference)
@@ -99,6 +104,50 @@ npm run dev
 
 Visit `http://localhost:3000` to interact with the UI using local mock data.
 
+This path needs only Node.js, npm and Rust (with the pinned toolchain). Docker,
+Python and the Stellar CLI are only required for the full stack — see
+[Full-stack setup](#full-stack-setup-apps--backend--contracts) below.
+
+### Full-stack setup (apps + backend + contracts)
+
+The consolidated end-to-end flow, from a clean checkout:
+
+```bash
+# 1. Toolchain — Node 20+, Rust 1.91.0 (pinned by rust-toolchain.toml), Python 3.10+
+node --version && rustc --version && python3 --version
+
+# 2. Install all npm workspaces from the root (never inside a workspace)
+npm install
+
+# 3. Contracts: build WASM and run the Rust test suite
+npm run contracts:build
+npm run contracts:test
+
+# 4. Backing services (Redis for the GraphQL API; Postgres optional)
+docker compose -f docker-compose.full.yml up -d redis
+
+# 5. Environment files — copy each example to the filename the service reads
+cp apps/interface/.env.example apps/interface/.env.local
+cp services/graphql-api/.env.example services/graphql-api/.env
+cp services/indexer/.env.example services/indexer/.env
+cp services/monitoring-service/.env.example services/monitoring-service/.env
+
+# 6. Backend Python engines
+python3 -m venv venv && source venv/bin/activate
+pip install -r backend/fraud_detection/requirements.txt
+pip install -r backend/recommendations/requirements.txt
+
+# 7. Start each process in its own terminal
+npm run dev                                   # frontend  → http://localhost:3000
+npm run dev --workspace=services/indexer      # indexer   → http://localhost:3001
+npm run dev --workspace=services/monitoring-service   # metrics → http://localhost:9091
+# GraphQL API (does not auto-load .env):
+set -a; source services/graphql-api/.env; set +a
+cd services/graphql-api && npx tsx src/index.ts       # → http://localhost:4000/graphql
+```
+
+Each step is expanded in [Workspace Setup & Execution](#workspace-setup--execution).
+
 ### npm workspaces
 
 This repository uses **npm workspaces**. Run `npm install` once at the repository
@@ -106,6 +155,18 @@ root: it installs dependencies for `apps/*`, `packages/*`, `sdks/*`, and
 `services/*`. Do not run a separate install inside an individual workspace; doing
 so creates a nested dependency tree and can hide version mismatches. Use the
 root `package-lock.json` as the source of truth for resolved versions.
+
+### Pinned Rust toolchain
+
+`rust-toolchain.toml` pins Rust **1.91.0** and declares the
+`wasm32-unknown-unknown` target. Running any `cargo` command inside the repo makes
+rustup download and use that exact toolchain and target — do not override it with
+a global `rustup default`. If you use a non-rustup Rust install, install the
+target manually:
+
+```bash
+rustup target add wasm32-unknown-unknown
+```
 
 Every root script is described in [Root Scripts Reference](#root-scripts-reference);
 per-workspace startup (GraphQL API, indexer, monitoring, Python engines) is in
@@ -352,6 +413,9 @@ pytest backend/fraud_detection/
 pytest backend/recommendations/
 ```
 
+The Python engines read configuration directly from the environment
+(`LOG_LEVEL`, `LOG_FORMAT`); there is no `.env.example` for `backend/` yet.
+
 ---
 
 ### 7. SDKs & Shared Packages
@@ -550,3 +614,5 @@ npx lint-staged
 - [API Reference](./api/README.md)
 - [GraphQL API Reference](./api/graphql.md)
 - [Security Model](./security-model.md)
+- [Crowdfund Contract README](../contracts/crowdfund/README.md)
+- [Indexer README](../services/indexer/README.md)

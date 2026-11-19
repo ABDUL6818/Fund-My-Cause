@@ -50,6 +50,11 @@
       "import": "./src/logger.ts",
       "require": "./src/logger.ts",
       "types": "./src/logger.ts"
+    },
+    "./design-tokens": {
+      "import": "./src/design-tokens.ts",
+      "require": "./src/design-tokens.ts",
+      "types": "./src/design-tokens.ts"
     }
   },
   "scripts": {

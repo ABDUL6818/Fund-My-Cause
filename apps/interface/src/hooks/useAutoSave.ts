@@ -1,7 +1,13 @@
 "use client";
 
 import { useEffect, useRef, useCallback, useState } from "react";
-import { useDebounce } from "./useDebounce";
+import {
+  useDebounce,
+  readPersisted,
+  writePersisted,
+  clearPersisted,
+  hasPersisted,
+} from "@fmc/shared-utils";
 
 export type AutoSaveStatus = "idle" | "saving" | "saved" | "error";
 
@@ -67,18 +73,14 @@ export function useAutoSave<T>(
 
   // Detect existing recovery on mount.
   useEffect(() => {
-    try {
-      setHasRecovery(localStorage.getItem(storageKey) !== null);
-    } catch {
-      setHasRecovery(false);
-    }
+    setHasRecovery(hasPersisted(storageKey));
   }, [storageKey]);
 
   const persist = useCallback(
     (payload: T) => {
       setStatus("saving");
       try {
-        localStorage.setItem(storageKey, JSON.stringify(payload));
+        writePersisted(storageKey, payload);
         setLastSaved(new Date());
         setHasRecovery(true);
         setStatus("saved");
@@ -110,19 +112,12 @@ export function useAutoSave<T>(
   }, [debouncedData, enabled, persist]);
 
   const recover = useCallback((): T | null => {
-    try {
-      const raw = localStorage.getItem(storageKey);
-      return raw ? (JSON.parse(raw) as T) : null;
-    } catch {
-      return null;
-    }
+    return readPersisted<T>(storageKey);
   }, [storageKey]);
 
   const clearRecovery = useCallback(() => {
-    try {
-      localStorage.removeItem(storageKey);
-      setHasRecovery(false);
-    } catch {}
+    clearPersisted(storageKey);
+    setHasRecovery(false);
   }, [storageKey]);
 
   const saveNow = useCallback(() => {
