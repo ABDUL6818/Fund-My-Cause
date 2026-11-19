@@ -10,6 +10,7 @@ import React, {
 } from "react";
 import { useLocalStorage } from "@/hooks/useLocalStorage";
 import { COINGECKO_API_URL } from "@/lib/constants";
+import { formatAmount } from "@fund-my-cause/shared-utils";
 
 export type FiatCurrency = "USD" | "EUR" | "NGN" | "GBP" | "JPY";
 
@@ -86,16 +87,12 @@ export function CurrencyProvider({ children }: { children: ReactNode }) {
   const formatFiat = (xlm: number): string | null => {
     if (xlmPrice === null) return null;
     const fiatInfo = FIAT_CURRENCIES.find((f) => f.code === currency);
-    const amount = xlm * xlmPrice;
-    try {
-      return amount.toLocaleString(undefined, {
-        style: "currency",
-        currency,
-        maximumFractionDigits: currency === "JPY" ? 0 : 2,
-      });
-    } catch {
-      return `${fiatInfo?.symbol ?? ""}${amount.toFixed(2)}`;
-    }
+    return formatAmount(xlm * xlmPrice, {
+      style: "currency",
+      currency,
+      maximumFractionDigits: currency === "JPY" ? 0 : 2,
+      fallbackSymbol: fiatInfo?.symbol,
+    });
   };
 
   return (

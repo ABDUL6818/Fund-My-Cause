@@ -16,6 +16,13 @@ const STATIC_DIR = path.join(BUILD_DIR, "static");
 
 const budgets = JSON.parse(fs.readFileSync(BUDGET_FILE, "utf-8")).budgets;
 
+// Routes whose per-route JS sizes are reported for the #1662 code-splitting
+// evidence (before/after bundle size comparison).
+const REPORTED_ROUTES = [
+  { route: "/campaigns/create", label: "campaign create" },
+  { route: "/dashboard", label: "dashboard" },
+];
+
 function formatKB(bytes) {
   return (bytes / 1024).toFixed(1);
 }
@@ -49,6 +56,19 @@ function findChunks(route) {
   return chunks;
 }
 
+function reportRouteSizes() {
+  console.log("\nPer-route JS sizes (code-splitting evidence):");
+  for (const { route, label } of REPORTED_ROUTES) {
+    const chunks = findChunks(route);
+    const jsSize = chunks
+      .filter((c) => c.name.endsWith(".js"))
+      .reduce((s, c) => s + c.size, 0);
+    console.log(
+      `  ${label.padEnd(20)} ${route.padEnd(20)} JS: ${formatKB(jsSize)}KB`,
+    );
+  }
+}
+
 let anyFailed = false;
 
 for (const budget of budgets) {
@@ -69,6 +89,8 @@ for (const budget of budgets) {
     `[${status}] ${budget.label.padEnd(20)} JS: ${jsKB}KB/${budget.maxJavascriptKB}KB CSS: ${cssKB}KB/${budget.maxCssKB}KB`
   );
 }
+
+reportRouteSizes();
 
 if (anyFailed) {
   console.error("\n❌ Bundle budgets exceeded! Review the optimization tips in docs/bundle-optimization.md.");
