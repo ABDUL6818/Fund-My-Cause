@@ -6,10 +6,11 @@ import { defineConfig } from "vitest/config";
  * Without this config vitest defaults to the `node` environment and every
  * render() call fails on a missing `document`.
  *
- * The `@design-tokens` alias points at the single shared token source so the
- * components-lib and apps/interface consume the same tokens (see #1672).
- * `vitest.setup.ts` wires up jest-dom matchers and axe (jest-axe) so
- * accessibility assertions are available in every test (see #1670, #1671).
+ * The include glob covers all unit tests under src/, including the focused
+ * subcomponent tests for CampaignActions (contribute/withdraw/refund) and
+ * CampaignHeader (title/status badge/creator info). The legacy *.entry.ts
+ * files have been replaced by a single barrel, so no entry-specific test
+ * patterns are needed here.
  */
 export default defineConfig({
   resolve: {
@@ -28,7 +29,12 @@ export default defineConfig({
       provider: "v8",
       reporter: ["text", "lcov"],
       include: ["src/**/*.{ts,tsx}"],
-      exclude: ["src/**/*.test.{ts,tsx}", "src/**/*.d.ts"],
+      exclude: [
+        "src/**/*.test.{ts,tsx}",
+        "src/**/*.d.ts",
+        "src/index.ts",
+        "src/**/index.ts",
+      ],
       thresholds: {
         lines: 85,
         functions: 85,

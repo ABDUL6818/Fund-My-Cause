@@ -22,9 +22,8 @@ const WalletSelectModal = dynamic(
  * Lives outside the WalletContext's old Provider tree since Zustand stores
  * don't need one — mount this once near the app root.
  *
- * The modal itself owns its focus trap and restores focus to the previously
- * focused element on close, so this host only needs to avoid rendering any
- * focusable content while hidden.
+ * WalletSelectModal renders through the shared components-lib Modal, so this
+ * host stays a thin wrapper with no interface-local modal markup.
  */
 export function WalletSelectModalHost() {
   const {
@@ -47,5 +46,10 @@ export function WalletSelectModalHost() {
 
   if (!showWalletSelect) return null;
 
-  return <WalletSelectModal onSelect={handleSelect} onClose={handleClose} />;
+  return (
+    <WalletSelectModal
+      onSelect={handleSelect}
+      onClose={() => setShowWalletSelect(false)}
+    />
+  );
 }

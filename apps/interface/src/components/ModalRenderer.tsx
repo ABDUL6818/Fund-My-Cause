@@ -1,33 +1,10 @@
 "use client";
 
-import React, { useEffect, useRef } from "react";
-import { X } from "lucide-react";
+import React from "react";
 import { cn } from "@/lib/utils";
 import { useModalSlice } from "@/hooks/useUiSlice";
 import type { ModalConfig } from "@/store/useModalStore";
-
-const FOCUSABLE_SELECTOR = [
-  "a[href]",
-  "button:not([disabled])",
-  "input:not([disabled])",
-  "select:not([disabled])",
-  "textarea:not([disabled])",
-  "[tabindex]:not([tabindex='-1'])",
-].join(",");
-
-function getFocusableElements(container: HTMLElement | null): HTMLElement[] {
-  if (!container) return [];
-  return Array.from(
-    container.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR),
-  ).filter((el) => el.offsetParent !== null || el === document.activeElement);
-}
-
-const sizes: Record<NonNullable<ModalConfig["size"]>, string> = {
-  sm: "max-w-sm",
-  md: "max-w-md",
-  lg: "max-w-lg",
-  xl: "max-w-xl",
-};
+import { Modal } from "@interface/components-lib";
 
 function ModalItem({
   modal,
@@ -117,50 +94,23 @@ function ModalItem({
         aria-hidden="true"
       />
       <div
-        ref={dialogRef}
-        className={cn(
-          "relative bg-[var(--color-surface)] rounded-[var(--radius-2xl)] shadow-2xl w-full mx-4",
-          "border border-[var(--color-border)]",
-          "transition-all duration-200",
-          "animate-in zoom-in-95 fade-in duration-200",
-          "focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)] focus-visible:ring-offset-2",
-          sizes[modal.size ?? "md"],
-        )}
+        className="relative w-full mx-4"
         style={{
           transform: `translateY(-${offset}px) scale(${1 - (total - 1 - index) * 0.02})`,
         }}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby={modal.title ? `modal-title-${modal.id}` : undefined}
-        tabIndex={-1}
-        onKeyDown={handleKeyDown}
       >
-        <div className="flex items-center justify-between p-6 border-b border-[var(--color-border)]">
-          {modal.title && (
-            <h2
-              id={`modal-title-${modal.id}`}
-              className="text-lg font-semibold text-[var(--color-text-primary)]"
-            >
-              {modal.title}
-            </h2>
-          )}
-          <button
-            type="button"
-            onClick={onClose}
-            className="ml-auto p-1 rounded-[var(--radius-lg)] hover:bg-[var(--color-surface-elevated)] transition-colors text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)] focus-visible:ring-offset-2"
-            aria-label="Close modal"
-          >
-            <X className="w-5 h-5" aria-hidden="true" />
-          </button>
-        </div>
-        <div className="p-6 text-[var(--color-text-primary)]">
+        <Modal
+          open
+          onClose={onClose}
+          title={modal.title}
+          footer={modal.footer}
+          size={modal.size ?? "md"}
+          closeOnBackdropClick={false}
+          showCloseButton
+          className="mx-0"
+        >
           {modal.content}
-        </div>
-        {modal.footer && (
-          <div className="flex items-center justify-end gap-3 p-6 border-t border-[var(--color-border)]">
-            {modal.footer}
-          </div>
-        )}
+        </Modal>
       </div>
     </div>
   );

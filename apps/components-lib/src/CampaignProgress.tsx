@@ -19,9 +19,16 @@ export interface CampaignProgressProps {
    * the bar clamps to 0–100 for display but accepts over-funded values.
    */
   percent: number;
-  /** Pre-formatted raised amount, e.g. "15,400 XLM (~$2,156 USD)". */
+  /**
+   * Pre-formatted raised amount, e.g. "15,400 XLM (~$2,156 USD)". Callers
+   * should memoize the formatted string (e.g. with `useMemo`) so the
+   * `React.memo` wrapper can skip re-renders.
+   */
   raisedText?: ReactNode;
-  /** Pre-formatted goal amount. */
+  /**
+   * Pre-formatted goal amount. Memoize the formatted string on the caller side
+   * for stable props.
+   */
   goalText?: ReactNode;
   /** Time-remaining element — a live countdown or a static string. */
   timeRemaining?: ReactNode;

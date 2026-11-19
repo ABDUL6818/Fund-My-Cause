@@ -25,6 +25,11 @@ export {
   type FormatCampaignCardOptions,
   type FormattedCampaignCard,
 } from "./utils/formatCampaignCard";
+export {
+  formatAmount,
+  type FormatAmountOptions,
+  type FormatAmountCurrency,
+} from "@fund-my-cause/shared-utils";
 export { cn } from "./lib/utils";
 
 // ── Design tokens (single source of truth, shared with apps/interface) ─────
@@ -87,6 +92,10 @@ export {
   CampaignDetailSkeleton,
   type CampaignDetailSkeletonProps,
 } from "./CampaignDetailSkeleton";
+export {
+  CampaignListSkeleton,
+  type CampaignListSkeletonProps,
+} from "./CampaignListSkeleton";
 
 export {
   ThemeProvider,
@@ -110,3 +119,8 @@ export {
 export { EmptyState, type EmptyStateProps } from "./EmptyState";
 
 export { ErrorState, type ErrorStateProps } from "./ErrorState";
+
+// ── Single exports map ───────────────────────────────────────────────────────
+// All public components, utilities, and context are re-exported from this
+// barrel. Individual `*.entry.ts` files have been removed; consumers should
+// import from `@fund-my-cause/components` (this module) only.

@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useState, useCallback } from "react";
+import { useState, useCallback, useMemo } from "react";
 import { fetchCampaignView } from "@/lib/graphql/client";
 import type { CampaignInfo, CampaignStats } from "@fund-my-cause/types";
 import { isValidContractId } from "@/lib/validation";
@@ -47,11 +47,14 @@ export function useCampaign(
     initialDataUpdatedAt: initialData ? Date.now() : undefined,
   });
 
-  const error =
-    rawError?.message ??
-    (isValidContractId(contractId)
-      ? null
-      : `Invalid contract ID format: ${contractId}`);
+  const error = useMemo(
+    () =>
+      rawError?.message ??
+      (isValidContractId(contractId)
+        ? null
+        : `Invalid contract ID format: ${contractId}`),
+    [rawError, contractId],
+  );
 
   const refresh = useCallback(() => {
     setOptimisticDelta(null);
@@ -72,18 +75,25 @@ export function useCampaign(
   }, []);
 
   const baseStats = data?.stats ?? null;
-  const stats: CampaignStats | null =
-    baseStats && optimisticDelta
-      ? {
-          ...baseStats,
-          totalRaised: baseStats.totalRaised + optimisticDelta.raisedDelta,
-          contributorCount:
-            baseStats.contributorCount + optimisticDelta.countDelta,
-        }
-      : baseStats;
+
+  // Memoize the derived stats object so consumers (e.g. campaign list rows)
+  // don't re-render when unrelated state changes. Only recompute when the
+  // base stats or the optimistic delta actually change.
+  const stats: CampaignStats | null = useMemo(() => {
+    if (!baseStats) return null;
+    if (!optimisticDelta) return baseStats;
+    return {
+      ...baseStats,
+      totalRaised: baseStats.totalRaised + optimisticDelta.raisedDelta,
+      contributorCount:
+        baseStats.contributorCount + optimisticDelta.countDelta,
+    };
+  }, [baseStats, optimisticDelta]);
+
+  const info = data?.info ?? null;
 
   return {
-    info: data?.info ?? null,
+    info,
     stats,
     loading,
     error,
@@ -174,5 +184,9 @@ export function useUnpause(contractId: string) {
       const { unpauseCampaign } = await import("@/lib/contract");
       return unpauseCampaign(contractId, admin, signTx);
     },
-  );
+    onSuccess: () =>
+      queryClient.invalidateQueries({
+        queryKey: QUERY_KEYS.campaign(contractId),
+      }),
+  });
 }

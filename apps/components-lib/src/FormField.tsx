@@ -81,7 +81,7 @@ export function FormField({
 
   const describedBy =
     [showError ? errorId : null, showHelper ? helperId : null]
-      .filter(Boolean)
+      .filter((value): value is string => Boolean(value))
       .join(" ") || undefined;
 
   const controlProps: FormControlProps = {

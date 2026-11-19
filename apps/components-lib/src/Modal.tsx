@@ -57,18 +57,10 @@ export function Modal({
     const container = containerRef.current;
     const previousFocus = document.activeElement as HTMLElement | null;
 
-    const getFocusable = () =>
-      Array.from(container.querySelectorAll<HTMLElement>(FOCUSABLE)).filter(
-        (el) => el.offsetParent !== null || el === document.activeElement,
-      );
-
-    // Move focus into the dialog (first focusable, else the dialog itself).
-    const initial = getFocusable()[0];
-    if (initial) {
-      initial.focus();
-    } else {
-      container.focus();
-    }
+    // Focus the first focusable element, falling back to the dialog itself
+    // (which is focusable via tabIndex={-1}) when there is nothing else.
+    const initialFocusable = container.querySelector<HTMLElement>(FOCUSABLE);
+    (initialFocusable ?? container).focus();
 
     const handleKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
@@ -80,7 +72,9 @@ export function Modal({
       // Re-query on every Tab press: the dialog's content (form steps,
       // validation messages, async-loaded sections) can change while open,
       // and a list captured only at open time would trap focus on stale nodes.
-      const focusable = getFocusable();
+      const focusable = Array.from(
+        container.querySelectorAll<HTMLElement>(FOCUSABLE),
+      );
       if (!focusable.length) {
         e.preventDefault();
         container.focus();

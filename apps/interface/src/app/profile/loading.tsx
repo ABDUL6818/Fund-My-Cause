@@ -1,43 +1,29 @@
 /**
  * Loading skeleton for profile route segment — Issue #1285
  *
- * Displays while profile data is being fetched.
+ * Displays while profile data is being fetched. Built from the shared
+ * skeleton primitives in @fund-my-cause/components so the pulse animation
+ * and styling live in one place (Issue #1669).
  */
+
+import { Skeleton, SkeletonText } from "@fund-my-cause/components";
 
 export default function ProfileLoading() {
   return (
     <div style={{ padding: "20px", maxWidth: "800px", margin: "0 auto" }}>
       <div style={{ marginBottom: "30px" }}>
-        <div
-          style={{
-            width: "120px",
-            height: "120px",
-            borderRadius: "50%",
-            backgroundColor: "#e0e0e0",
-            margin: "0 auto 20px",
-            animation: "pulse 2s infinite",
-          }}
+        <Skeleton
+          variant="circular"
+          width={120}
+          height={120}
+          style={{ margin: "0 auto 20px" }}
         />
-        <div
-          style={{
-            backgroundColor: "#e0e0e0",
-            height: "28px",
-            borderRadius: "4px",
-            maxWidth: "300px",
-            margin: "0 auto 10px",
-            animation: "pulse 2s infinite",
-          }}
+        <Skeleton
+          width={300}
+          height={28}
+          style={{ margin: "0 auto 10px" }}
         />
-        <div
-          style={{
-            backgroundColor: "#f0f0f0",
-            height: "16px",
-            borderRadius: "4px",
-            maxWidth: "200px",
-            margin: "0 auto",
-            animation: "pulse 2s infinite",
-          }}
-        />
+        <Skeleton width={200} height={16} style={{ margin: "0 auto" }} />
       </div>
 
       {Array.from({ length: 3 }).map((_, i) => (
@@ -47,34 +33,17 @@ export default function ProfileLoading() {
               backgroundColor: "#f5f5f5",
               padding: "16px",
               borderRadius: "8px",
-              animation: "pulse 2s infinite",
             }}
           >
-            <div
-              style={{
-                backgroundColor: "#e0e0e0",
-                height: "20px",
-                borderRadius: "4px",
-                marginBottom: "12px",
-              }}
+            <Skeleton
+              width="100%"
+              height={20}
+              style={{ marginBottom: "12px" }}
             />
-            <div
-              style={{
-                backgroundColor: "#f0f0f0",
-                height: "40px",
-                borderRadius: "4px",
-              }}
-            />
+            <SkeletonText lines={2} height={20} />
           </div>
         </div>
       ))}
-
-      <style>{`
-        @keyframes pulse {
-          0%, 100% { opacity: 1; }
-          50% { opacity: 0.5; }
-        }
-      `}</style>
     </div>
   );
 }
