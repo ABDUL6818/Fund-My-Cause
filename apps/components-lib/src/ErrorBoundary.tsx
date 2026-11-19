@@ -18,7 +18,7 @@ import React, {
   type ComponentType,
 } from "react";
 import { AlertCircle, RefreshCw, WifiOff, Lock } from "lucide-react";
-import { cn } from "./lib/utils";
+import { ErrorState } from "./ErrorState";
 
 export type ErrorBoundaryLevel = "page" | "section" | "component";
 
@@ -176,6 +176,9 @@ export interface ErrorFallbackProps {
  * `error.tsx` files (Next's own error boundaries take the same
  * `{ error, reset }` shape), so every crash surface in the app renders the
  * same look with the same retry affordance.
+ *
+ * This is the single fallback contract: it delegates rendering to the shared
+ * `ErrorState` component so all crash surfaces stay visually consistent.
  */
 export function ErrorFallback({
   error,
@@ -184,60 +187,27 @@ export function ErrorFallback({
 }: ErrorFallbackProps) {
   const { icon, title, description } = getErrorMeta(error);
 
-  const containerClasses: Record<ErrorBoundaryLevel, string> = {
-    page: "min-h-screen flex items-center justify-center p-4",
-    section:
-      "p-6 rounded-lg border border-red-200 dark:border-red-900/50 bg-red-50 dark:bg-red-950/30",
-    component:
-      "p-4 rounded border border-red-200 dark:border-red-900/50 bg-red-50 dark:bg-red-950/30",
-  };
-
-  const titleClasses: Record<ErrorBoundaryLevel, string> = {
-    page: "text-3xl",
-    section: "text-xl",
-    component: "text-lg",
-  };
-
   return (
-    <div className={containerClasses[level]}>
-      <div className="max-w-md w-full">
-        <div className="flex items-start gap-3">
-          {icon}
-          <div className="flex-1">
-            <h2
-              className={cn(
-                "font-semibold text-red-900 dark:text-red-200",
-                titleClasses[level],
-              )}
-            >
-              {title}
-            </h2>
-            <p className="text-sm text-red-700 dark:text-red-300 mt-2">
-              {process.env.NODE_ENV === "development"
-                ? error.message
-                : description}
-            </p>
-            {process.env.NODE_ENV === "development" && (
-              <details className="mt-3 text-xs text-red-600 dark:text-red-400">
-                <summary className="cursor-pointer font-mono">
-                  Error details
-                </summary>
-                <pre className="mt-2 p-2 bg-red-100 dark:bg-red-900/40 rounded overflow-auto max-h-40">
-                  {error.stack}
-                </pre>
-              </details>
-            )}
-            <button
-              onClick={reset}
-              className="mt-4 inline-flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 transition-colors text-sm font-medium"
-            >
-              <RefreshCw size={14} />
-              Try again
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
+    <ErrorState
+      icon={icon}
+      title={title}
+      description={
+        process.env.NODE_ENV === "development" ? error.message : description
+      }
+      details={
+        process.env.NODE_ENV === "development" ? error.stack : undefined
+      }
+      level={level}
+      actions={
+        <button
+          onClick={reset}
+          className="mt-4 inline-flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 transition-colors text-sm font-medium"
+        >
+          <RefreshCw size={14} />
+          Try again
+        </button>
+      }
+    />
   );
 }
 

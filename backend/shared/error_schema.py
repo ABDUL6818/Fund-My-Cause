@@ -35,7 +35,7 @@ Usage example
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional
+from typing import Any, Dict, Optional
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
@@ -117,8 +117,8 @@ class ErrorDetail:
 class ErrorEnvelope:
     error: ErrorDetail
 
-    def to_dict(self) -> dict:
-        result: dict = {
+    def to_dict(self) -> Dict[str, Any]:
+        result: Dict[str, Any] = {
             "error": {
                 "code": self.error.code,
                 "message": self.error.message,
@@ -159,11 +159,37 @@ def service_unavailable(message: str, detail: Optional[str] = None) -> JSONRespo
     return _make_response(503, ErrorCode.SERVICE_UNAVAILABLE, message, detail)
 
 
-async def app_error_handler(request: Request, exc: AppError) -> JSONResponse:
-    """FastAPI exception handler mapping :class:`AppError` to the envelope."""
-    return exc.to_response()
+# OpenAPI schema describing the error envelope, for use in route
+# ``responses={...}`` declarations so the generated spec documents errors.
+ERROR_RESPONSE_SCHEMA: Dict[str, Any] = {
+    "type": "object",
+    "required": ["error"],
+    "properties": {
+        "error": {
+            "type": "object",
+            "required": ["code", "message"],
+            "properties": {
+                "code": {
+                    "type": "string",
+                    "enum": [
+                        ErrorCode.BAD_REQUEST,
+                        ErrorCode.NOT_FOUND,
+                        ErrorCode.UNPROCESSABLE_ENTITY,
+                        ErrorCode.INTERNAL_ERROR,
+                        ErrorCode.SERVICE_UNAVAILABLE,
+                    ],
+                },
+                "message": {"type": "string"},
+                "detail": {"type": "string", "nullable": True},
+            },
+        }
+    },
+}
 
 
-def register_exception_handlers(app: FastAPI) -> None:
-    """Register the central error handlers on a FastAPI application."""
-    app.add_exception_handler(AppError, app_error_handler)
+def error_response(status_code: int, description: str) -> Dict[str, Any]:
+    """Build a FastAPI ``responses`` entry documenting the error envelope."""
+    return {
+        "description": description,
+        "content": {"application/json": {"schema": ERROR_RESPONSE_SCHEMA}},
+    }

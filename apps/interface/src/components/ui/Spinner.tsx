@@ -16,6 +16,11 @@ export interface SpinnerProps {
 /**
  * Inline spinner for action buttons and async states.
  * Uses the brand color token so it adapts to light/dark automatically.
+ *
+ * This is the single source of truth for inline spinners. Do not create
+ * duplicate spinner components; import this one instead. For list/detail
+ * loading states, prefer the shared skeletons (e.g. CampaignDetailSkeleton)
+ * over spinners.
  */
 export function Spinner({
   size = 16,
@@ -31,3 +36,5 @@ export function Spinner({
     />
   );
 }
+
+export default Spinner;

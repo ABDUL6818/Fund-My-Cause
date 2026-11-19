@@ -1,6 +1,6 @@
 "use client";
 
-import React, { ReactNode, useEffect, useRef } from "react";
+import React, { ReactNode, useEffect, useId, useRef } from "react";
 import { X } from "lucide-react";
 import { cn } from "./lib/utils";
 
@@ -40,24 +40,31 @@ export function Modal({
   closeOnBackdropClick = true,
 }: ModalProps) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const titleId = useId();
 
   useEffect(() => {
     if (!isOpen) return;
+    const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     return () => {
-      document.body.style.overflow = "unset";
+      document.body.style.overflow = previousOverflow;
     };
   }, [isOpen]);
 
-  // Focus trap
+  // Focus trap + focus restoration
   useEffect(() => {
     if (!isOpen || !containerRef.current) return;
     const container = containerRef.current;
     const previousFocus = document.activeElement as HTMLElement | null;
-    container.querySelectorAll<HTMLElement>(FOCUSABLE)[0]?.focus();
+
+    // Focus the first focusable element, falling back to the dialog itself
+    // (which is focusable via tabIndex={-1}) when there is nothing else.
+    const initialFocusable = container.querySelector<HTMLElement>(FOCUSABLE);
+    (initialFocusable ?? container).focus();
 
     const handleKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
+        e.stopPropagation();
         onClose();
         return;
       }
@@ -68,13 +75,18 @@ export function Modal({
       const focusable = Array.from(
         container.querySelectorAll<HTMLElement>(FOCUSABLE),
       );
-      if (!focusable.length) return;
+      if (!focusable.length) {
+        e.preventDefault();
+        container.focus();
+        return;
+      }
       const first = focusable[0];
       const last = focusable[focusable.length - 1];
-      if (e.shiftKey && document.activeElement === first) {
+      const active = document.activeElement;
+      if (e.shiftKey && (active === first || active === container)) {
         e.preventDefault();
         last.focus();
-      } else if (!e.shiftKey && document.activeElement === last) {
+      } else if (!e.shiftKey && active === last) {
         e.preventDefault();
         first.focus();
       }
@@ -117,20 +129,22 @@ export function Modal({
         )}
         role="dialog"
         aria-modal="true"
-        aria-labelledby={title ? "modal-title" : undefined}
+        aria-labelledby={title ? titleId : undefined}
+        tabIndex={-1}
       >
         <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700">
           {title && (
             <h2
-              id="modal-title"
+              id={titleId}
               className="text-lg font-semibold text-gray-900 dark:text-gray-100"
             >
               {title}
             </h2>
           )}
           <button
+            type="button"
             onClick={onClose}
-            className="ml-auto p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors text-gray-500 dark:text-gray-400"
+            className="ml-auto p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors text-gray-500 dark:text-gray-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-gray-800"
             aria-label="Close modal"
           >
             <X className="w-5 h-5" aria-hidden="true" />

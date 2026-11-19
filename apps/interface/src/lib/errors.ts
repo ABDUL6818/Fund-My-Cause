@@ -78,9 +78,27 @@ const SEVERITY_MAP: Partial<Record<ErrorCode, ErrorSeverity>> = {
   [ErrorCode.CONTRACT_GOAL_NOT_REACHED]: "info",
 };
 
-// ── User-friendly messages ────────────────────────────────────────────────────
+// ── i18n-ready message dictionary ─────────────────────────────────────────────
 
-const USER_MESSAGES: Record<ErrorCode, string> = {
+/**
+ * Locale identifier for the message dictionary. Kept as a plain string so the
+ * dictionary can be swapped for a real i18n backend (e.g. next-intl) without
+ * changing call sites.
+ */
+export type Locale = string;
+
+export const DEFAULT_LOCALE: Locale = "en";
+
+/**
+ * Message dictionary keyed by ErrorCode. Structured as `locale -> code ->
+ * message` so additional locales can be added without touching consumers.
+ */
+export type ErrorMessageDictionary = Record<
+  Locale,
+  Partial<Record<ErrorCode, string>>
+>;
+
+const EN_MESSAGES: Record<ErrorCode, string> = {
   [ErrorCode.CONTRACT_NOT_INITIALIZED]:
     "This campaign has not been set up yet.",
   [ErrorCode.CONTRACT_ALREADY_INITIALIZED]:
@@ -148,6 +166,25 @@ const USER_MESSAGES: Record<ErrorCode, string> = {
   [ErrorCode.UNKNOWN]: "An unexpected error occurred. Please try again.",
 };
 
+export const ERROR_MESSAGES: ErrorMessageDictionary = {
+  [DEFAULT_LOCALE]: EN_MESSAGES,
+};
+
+/**
+ * Looks up the localized message for an error code, falling back to the
+ * default locale and finally to the generic UNKNOWN message.
+ */
+export function getErrorMessage(
+  code: ErrorCode,
+  locale: Locale = DEFAULT_LOCALE,
+): string {
+  return (
+    ERROR_MESSAGES[locale]?.[code] ??
+    ERROR_MESSAGES[DEFAULT_LOCALE]?.[code] ??
+    EN_MESSAGES[ErrorCode.UNKNOWN]
+  );
+}
+
 // ── AppError class ────────────────────────────────────────────────────────────
 
 export class AppError extends Error {
@@ -156,7 +193,7 @@ export class AppError extends Error {
   readonly originalError?: unknown;
 
   constructor(code: ErrorCode, message?: string, originalError?: unknown) {
-    super(message ?? USER_MESSAGES[code]);
+    super(message ?? getErrorMessage(code));
     this.name = "AppError";
     this.code = code;
     this.severity = SEVERITY_MAP[code] ?? "error";
@@ -204,6 +241,37 @@ function classifyContractError(message: string): ErrorCode {
     if (pattern.test(message)) return code;
   }
   return ErrorCode.CONTRACT_CALL_FAILED;
+}
+
+/**
+ * Maps a raw contract error code or error object to a localized user-facing
+ * message.
+ *
+ * Accepts either a contract error code string (e.g. "CampaignEnded"), an
+ * ErrorCode enum value, or an object carrying a `code`/`message` field.
+ */
+export function mapContractErrorToMessage(
+  input: string | ErrorCode | { code?: string; message?: string },
+  locale: Locale = DEFAULT_LOCALE,
+): string {
+  if (typeof input === "string") {
+    const code = isErrorCode(input)
+      ? input
+      : classifyContractError(input);
+    return getErrorMessage(code, locale);
+  }
+
+  if (input && typeof input === "object") {
+    const raw = input.code ?? input.message ?? "";
+    const code = isErrorCode(raw) ? raw : classifyContractError(raw);
+    return getErrorMessage(code, locale);
+  }
+
+  return getErrorMessage(ErrorCode.UNKNOWN, locale);
+}
+
+function isErrorCode(value: string): value is ErrorCode {
+  return Object.prototype.hasOwnProperty.call(EN_MESSAGES, value);
 }
 
 function classifyNetworkError(message: string): ErrorCode {
@@ -283,6 +351,9 @@ export function toAppError(err: unknown): AppError {
 /**
  * Returns the user-facing message for an AppError.
  */
-export function getUserMessage(err: AppError): string {
-  return USER_MESSAGES[err.code] ?? USER_MESSAGES[ErrorCode.UNKNOWN];
+export function getUserMessage(
+  err: AppError,
+  locale: Locale = DEFAULT_LOCALE,
+): string {
+  return getErrorMessage(err.code, locale);
 }

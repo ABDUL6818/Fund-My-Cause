@@ -21,6 +21,11 @@ import {
   validateVideoUrl as sharedValidateVideoUrl,
   validateMaxContribution as sharedValidateMaxContribution,
 } from "@fund-my-cause/types";
+import { z } from "zod";
+import {
+  optionalXlmCapSchema,
+  firstSchemaError,
+} from "@/lib/validationSchemas";
 import { sanitizeText } from "@/lib/sanitize";
 
 // Re-export shared constants for callers that import them from this module.
@@ -141,4 +146,149 @@ export function validateMinContribution(
  */
 export function validateFeeBps(feeBps: string): string | null {
   return sharedValidateFeeBps(feeBps);
+}
+
+// ---------------------------------------------------------------------------
+// Shared zod schema for the campaign creation form
+// ---------------------------------------------------------------------------
+
+/**
+ * Per-step sub-schemas for the multi-step campaign creation form.
+ *
+ * Each step validates only the fields it owns so the form can gate navigation
+ * between steps. The combined `campaignCreationSchema` validates the whole
+ * payload on submit. Field-level rules delegate to the shared
+ * @fund-my-cause/types validators so frontend and backend stay in sync.
+ */
+
+/** Step 1: basic campaign details. */
+export const campaignBasicsSchema = z.object({
+  title: z
+    .string()
+    .superRefine((value, ctx) => {
+      const error = validateCampaignTitle(value);
+      if (error) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: error });
+      }
+    }),
+  description: z
+    .string()
+    .superRefine((value, ctx) => {
+      const error = validateCampaignDescription(value);
+      if (error) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: error });
+      }
+    }),
+});
+
+/** Step 2: funding parameters. */
+export const campaignFundingSchema = z
+  .object({
+    goal: z
+      .string()
+      .superRefine((value, ctx) => {
+        const error = validateCampaignGoal(value);
+        if (error) {
+          ctx.addIssue({ code: z.ZodIssueCode.custom, message: error });
+        }
+      }),
+    deadline: z
+      .string()
+      .superRefine((value, ctx) => {
+        const error = validateCampaignDeadline(value);
+        if (error) {
+          ctx.addIssue({ code: z.ZodIssueCode.custom, message: error });
+        }
+      }),
+    minContribution: z.string(),
+    maxContribution: z.string().optional().default(""),
+    feeBps: z
+      .string()
+      .superRefine((value, ctx) => {
+        const error = sharedValidateFeeBps(value);
+        if (error) {
+          ctx.addIssue({ code: z.ZodIssueCode.custom, message: error });
+        }
+      }),
+  })
+  .superRefine((value, ctx) => {
+    const minError = sharedValidateMinContribution(
+      value.minContribution,
+      value.goal,
+    );
+    if (minError) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["minContribution"],
+        message: minError,
+      });
+    }
+
+    const maxError = validateMaxContribution(
+      value.maxContribution ?? "",
+      value.minContribution,
+    );
+    if (maxError) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["maxContribution"],
+        message: maxError,
+      });
+    }
+  });
+
+/** Step 3: media (optional video URL). */
+export const campaignMediaSchema = z.object({
+  videoUrl: z
+    .string()
+    .optional()
+    .default("")
+    .superRefine((value, ctx) => {
+      const error = validateVideoUrl(value ?? "");
+      if (error) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: error });
+      }
+    }),
+});
+
+/** Step 4: review step — no additional fields, just a confirmation gate. */
+export const campaignReviewSchema = z.object({
+  confirmed: z.literal(true, {
+    errorMap: () => ({
+      message: "Please confirm the campaign details before submitting.",
+    }),
+  }),
+});
+
+/** Combined schema for the full campaign creation payload. */
+export const campaignCreationSchema = campaignBasicsSchema
+  .merge(campaignFundingSchema.innerType())
+  .merge(campaignMediaSchema);
+
+export type CampaignBasicsValues = z.infer<typeof campaignBasicsSchema>;
+export type CampaignFundingValues = z.infer<typeof campaignFundingSchema>;
+export type CampaignMediaValues = z.infer<typeof campaignMediaSchema>;
+export type CampaignReviewValues = z.infer<typeof campaignReviewSchema>;
+export type CampaignCreationValues = z.infer<typeof campaignCreationSchema>;
+
+/**
+ * Validate a single step's values against its schema.
+ * @returns A map of field name -> error message (empty when valid).
+ */
+export function validateCampaignStep<T extends z.ZodTypeAny>(
+  schema: T,
+  values: unknown,
+): Record<string, string> {
+  const result = schema.safeParse(values);
+  if (result.success) {
+    return {};
+  }
+  const errors: Record<string, string> = {};
+  for (const issue of result.error.issues) {
+    const key = issue.path.length > 0 ? issue.path.join(".") : "_form";
+    if (!errors[key]) {
+      errors[key] = issue.message;
+    }
+  }
+  return errors;
 }

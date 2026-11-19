@@ -2,7 +2,51 @@
 
 This directory contains the Soroban smart contract for campaign creation, contributions, withdrawals, and refunds.
 
+## Architecture & Storage Layout
+
+The contract architecture (how `crowdfund`, `registry`, `qf` and `achievements` are split, what
+each is responsible for, and how they interact) is documented in the ADR:
+
+- [`docs/adr/0001-contract-architecture-and-storage-layout.md`](../../docs/adr/0001-contract-architecture-and-storage-layout.md)
+
+### Storage keys (summary)
+
+All persistent state is namespaced per contract; the crowdfund contract uses the following
+`DataKey` variants (see `src/storage.rs` for the authoritative definitions):
+
+| Key | Storage | Purpose |
+| --- | --- | --- |
+| `Admin` | instance | Contract admin address |
+| `Token` | instance | Contribution token address |
+| `Config` | instance | Campaign config (goal, deadline, min contribution, caps) |
+| `CampaignState` | instance | Lifecycle state (active / succeeded / failed / withdrawn) |
+| `TotalRaised` | instance | Aggregate contributed amount |
+| `Contributor(Address)` | persistent | Per-contributor contributed amount |
+| `ContributorCount` | instance | Number of distinct contributors |
+| `Refunded(Address)` | persistent | Refund-claimed flag per contributor |
+| `Paused` | instance | Emergency pause flag |
+
+Instance storage is bumped on every entry point; persistent entries are bumped on access with the
+TTL policy defined in the ADR. Keys are never reused for a different meaning — new state gets a
+new variant.
+
+### Upgrade policy
+
+The contract is **not** self-upgrading. Upgrades are performed by deploying a new WASM and
+migrating state through an admin-gated migration entry point, following the compatibility rules
+in the ADR (append-only `DataKey` variants, no reordering, no removal of live keys). Any change to
+the storage layout must update the ADR and the storage-key tests below.
+
+### Tests validating the documented keys
+
+- `src/storage.rs` unit tests assert each `DataKey` round-trips through `Env` storage.
+- `src/test.rs` covers the read/write paths for `Config`, `Contributor`, `TotalRaised` and
+  `Refunded`, and the pause/upgrade guards.
+
+Run them with `cargo test --manifest-path contracts/crowdfund/Cargo.toml`.
+
 ## Local Test Coverage Target
+=======
 We enforce a minimum **85% line and branch coverage** target for `contracts/crowdfund`.
 
 ### Running Coverage Locally

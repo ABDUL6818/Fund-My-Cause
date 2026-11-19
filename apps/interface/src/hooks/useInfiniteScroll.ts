@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 export interface UseInfiniteScrollOptions {
   threshold?: number;
@@ -118,5 +118,8 @@ export function useInfiniteScroll(
     retryCountRef.current = 0;
   }, []);
 
-  return { sentinelRef, isLoading, error, retry, reset };
+  return useMemo(
+    () => ({ sentinelRef, isLoading, error, retry, reset }),
+    [isLoading, error, retry, reset],
+  );
 }

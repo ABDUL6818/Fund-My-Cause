@@ -6,21 +6,18 @@
 
 "use client";
 
-import { ErrorPageProps } from "@/components/ErrorBoundary";
-import { ErrorState } from "@/components/ErrorState";
+import { RouteError, type RouteErrorProps } from "@/components/ErrorBoundary";
 
-export default function CampaignsError({ error, reset }: ErrorPageProps) {
+export default function CampaignsError({ error, reset }: RouteErrorProps) {
   return (
-    <ErrorState
+    <RouteError
+      error={error}
+      reset={reset}
       title="Failed to load campaigns"
       message={
         error?.message ||
         "Unable to load the campaigns list. Please try again."
       }
-      onRetry={reset}
-      retryLabel="Try again"
-      actionHref="/"
-      actionLabel="Go home"
     />
   );
 }

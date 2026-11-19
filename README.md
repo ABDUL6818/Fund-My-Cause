@@ -133,7 +133,13 @@ The app uses `@stellar/freighter-api` for wallet connectivity. The `WalletContex
 
 ## Getting Started
 
-Follow **[docs/SETUP.md](./docs/SETUP.md)** for the complete local setup: npm workspaces, the pinned Rust toolchain, Docker Compose, environment files, tests, and per-service startup. This README intentionally does not duplicate those steps.
+All setup instructions live in one place: **[docs/SETUP.md](./docs/SETUP.md)**. It covers, for every part of the monorepo:
+
+- **Apps** — `apps/interface`: Node/npm workspaces, environment files, dev server, lint, typecheck, and Jest coverage.
+- **Backend** — `services/*`: Docker Compose, required environment variables, migrations, and per-service startup.
+- **Contracts** — `contracts/crowdfund` and `contracts/registry`: the pinned Rust toolchain, `wasm32-unknown-unknown` target, build, test, and deploy scripts.
+
+This README intentionally does not duplicate those steps, so there is a single source of truth to keep current. If you find a gap or a stale command, please open an issue or PR against `docs/SETUP.md`.
 
 For container deployment details, see [Docker](#docker) and [docs/docker.md](./docs/docker.md). For testnet deployment, see [docs/deployment.md](./docs/deployment.md).
 
