@@ -1,54 +1,34 @@
-//! Registry Event Helpers
+//! Registry event helpers.
 //!
-//! This module re-exports shared event helpers for the registry contract.
-//! All event emission should use these helpers for consistency.
+//! All event emission goes through [`common::EventEmitter`] so that the
+//! registry shares the same topic constants and routing infrastructure used
+//! by the crowdfund and achievements contracts. Off-chain consumers (indexer,
+//! webhooks) can parse registry events through the same code path.
 
-use common::events::EventEmitter;
+use common::{topics, EventEmitter};
 
-/// Registry-specific event helpers
-pub struct RegistryEvents;
+/// Thin wrappers over `common::EventEmitter` for registry-specific events.
+pub(crate) struct RegistryEvents;
 
 impl RegistryEvents {
-    /// Emit registry initialized event
-    pub fn initialized(env: &soroban_sdk::Env, admin: soroban_sdk::Address) {
+    /// Emit `reg_init` — registry was initialised with a new admin.
+    pub(crate) fn initialized(env: &soroban_sdk::Env, admin: soroban_sdk::Address) {
         EventEmitter::registry_initialized(env, admin);
     }
 
-    /// Emit project registered event
-    pub fn project_registered(
+    /// Emit `reg_proj` — a campaign was added to the global registry list.
+    ///
+    /// Uses `topics::REGISTRY_PROJECT_REGISTERED` so the indexer can handle
+    /// campaign registration events alongside project events via the same
+    /// topic filter.
+    pub(crate) fn campaign_registered(
         env: &soroban_sdk::Env,
-        project_id: u64,
-        creator: soroban_sdk::Address,
-        name: soroban_sdk::String,
-        category: soroban_sdk::String,
+        campaign_id: soroban_sdk::Address,
     ) {
-        EventEmitter::project_registered(env, project_id, creator, name, category);
-    }
-
-    /// Emit project updated event
-    pub fn project_updated(
-        env: &soroban_sdk::Env,
-        project_id: u64,
-        updated_by: soroban_sdk::Address,
-    ) {
-        EventEmitter::project_updated(env, project_id, updated_by);
-    }
-
-    /// Emit project verified event
-    pub fn project_verified(
-        env: &soroban_sdk::Env,
-        project_id: u64,
-        verifier: soroban_sdk::Address,
-    ) {
-        EventEmitter::project_verified(env, project_id, verifier);
-    }
-
-    /// Emit project archived event
-    pub fn project_archived(
-        env: &soroban_sdk::Env,
-        project_id: u64,
-        archived_by: soroban_sdk::Address,
-    ) {
-        EventEmitter::project_archived(env, project_id, archived_by);
+        EventEmitter::emit(
+            env,
+            topics::REGISTRY_PROJECT_REGISTERED,
+            (campaign_id, env.ledger().timestamp()),
+        );
     }
 }

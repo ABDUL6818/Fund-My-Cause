@@ -1,163 +1,121 @@
 #![cfg(test)]
+#![allow(deprecated)]
+
 use super::*;
-use soroban_sdk::{Env, Address, String};
+use soroban_sdk::{testutils::Address as _, Address, Env};
+
+fn deploy_and_init(env: &Env) -> (Address, RegistryContractClient) {
+    let id = env.register_contract(None, RegistryContract);
+    let client = RegistryContractClient::new(env, &id);
+    let admin = Address::generate(env);
+    env.mock_all_auths();
+    client.initialize(&admin).unwrap();
+    (admin, client)
+}
 
 #[test]
 fn test_initialize_registry() {
     let env = Env::default();
-    let admin = Address::random(&env);
-    let fee_recipient = Address::random(&env);
-
-    let result = RegistryContract::initialize(
-        env.clone(),
-        admin.clone(),
-        100,
-        fee_recipient,
-    );
-    assert!(result.is_ok());
-
-    let stored_admin = RegistryContract::get_admin(env).unwrap();
-    assert_eq!(stored_admin, admin);
+    let (_admin, _client) = deploy_and_init(&env);
 }
 
 #[test]
-fn test_register_and_get_project() {
+fn test_initialize_twice_returns_error() {
     let env = Env::default();
-    let admin = Address::random(&env);
-    let fee_recipient = Address::random(&env);
-    let creator = Address::random(&env);
-
-    RegistryContract::initialize(
-        env.clone(),
-        admin,
-        100,
-        fee_recipient,
-    ).unwrap();
-
-    let id = RegistryContract::register_project(
-        env.clone(),
-        creator.clone(),
-        String::from_str(&env, "Test Project"),
-        String::from_str(&env, "Test Description"),
-        String::from_str(&env, "Technology"),
-    ).unwrap();
-
-    let project = RegistryContract::get_project(env, id).unwrap();
-    assert_eq!(project.name, String::from_str(&env, "Test Project"));
-    assert_eq!(project.creator, creator);
+    let (admin, client) = deploy_and_init(&env);
+    let result = client.try_initialize(&admin);
+    assert_eq!(result, Err(Ok(ContractError::AlreadyInitialized)));
 }
 
 #[test]
-fn test_update_project() {
+fn test_register_and_list() {
     let env = Env::default();
-    let admin = Address::random(&env);
-    let fee_recipient = Address::random(&env);
-    let creator = Address::random(&env);
+    let (_admin, client) = deploy_and_init(&env);
+    let campaign = Address::generate(&env);
 
-    RegistryContract::initialize(
-        env.clone(),
-        admin,
-        100,
-        fee_recipient,
-    ).unwrap();
+    client.register(&campaign).unwrap();
 
-    let id = RegistryContract::register_project(
-        env.clone(),
-        creator.clone(),
-        String::from_str(&env, "Test Project"),
-        String::from_str(&env, "Test Description"),
-        String::from_str(&env, "Technology"),
-    ).unwrap();
-
-    let result = RegistryContract::update_project(
-        env.clone(),
-        id,
-        creator,
-        Some(String::from_str(&env, "Updated Project")),
-        Some(String::from_str(&env, "Updated Description")),
-        None,
-    );
-    assert!(result.is_ok());
-
-    let project = RegistryContract::get_project(env, id).unwrap();
-    assert_eq!(project.name, String::from_str(&env, "Updated Project"));
+    let all = client.list(&0, &10);
+    assert_eq!(all.len(), 1);
+    assert_eq!(all.get(0).unwrap(), campaign);
 }
 
 #[test]
-fn test_verify_project() {
+fn test_register_deduplicates() {
     let env = Env::default();
-    let admin = Address::random(&env);
-    let fee_recipient = Address::random(&env);
-    let creator = Address::random(&env);
+    let (_admin, client) = deploy_and_init(&env);
+    let campaign = Address::generate(&env);
 
-    RegistryContract::initialize(
-        env.clone(),
-        admin.clone(),
-        100,
-        fee_recipient,
-    ).unwrap();
+    client.register(&campaign).unwrap();
+    client.register(&campaign).unwrap();
 
-    let id = RegistryContract::register_project(
-        env.clone(),
-        creator,
-        String::from_str(&env, "Test Project"),
-        String::from_str(&env, "Test Description"),
-        String::from_str(&env, "Technology"),
-    ).unwrap();
-
-    let result = RegistryContract::verify_project(env.clone(), id, admin);
-    assert!(result.is_ok());
-
-    let project = RegistryContract::get_project(env, id).unwrap();
-    assert!(project.verified);
+    assert_eq!(client.list(&0, &10).len(), 1);
 }
 
 #[test]
-fn test_pause_registry() {
+fn test_register_with_status_and_list_by_status() {
     let env = Env::default();
-    let admin = Address::random(&env);
-    let fee_recipient = Address::random(&env);
+    let (_admin, client) = deploy_and_init(&env);
+    let c1 = Address::generate(&env);
+    let c2 = Address::generate(&env);
 
-    RegistryContract::initialize(
-        env.clone(),
-        admin.clone(),
-        100,
-        fee_recipient,
-    ).unwrap();
+    client.register_with_status(&c1, &CampaignStatus::Active).unwrap();
+    client.register_with_status(&c2, &CampaignStatus::Failed).unwrap();
 
-    let result = RegistryContract::pause(env.clone(), admin.clone());
-    assert!(result.is_ok());
-
-    let paused = RegistryContract::is_paused(env);
-    assert!(paused);
+    assert_eq!(client.list_by_status(&CampaignStatus::Active, &0, &10).len(), 1);
+    assert_eq!(client.list_by_status(&CampaignStatus::Failed, &0, &10).len(), 1);
+    assert_eq!(client.list_by_status(&CampaignStatus::Successful, &0, &10).len(), 0);
 }
 
 #[test]
-fn test_archive_project() {
+fn test_register_with_category() {
     let env = Env::default();
-    let admin = Address::random(&env);
-    let fee_recipient = Address::random(&env);
-    let creator = Address::random(&env);
+    let (_admin, client) = deploy_and_init(&env);
+    let c1 = Address::generate(&env);
+    let c2 = Address::generate(&env);
 
-    RegistryContract::initialize(
-        env.clone(),
-        admin.clone(),
-        100,
-        fee_recipient,
-    ).unwrap();
+    client.register_with_category(&c1, &0).unwrap();
+    client.register_with_category(&c2, &1).unwrap();
 
-    let id = RegistryContract::register_project(
-        env.clone(),
-        creator,
-        String::from_str(&env, "Test Project"),
-        String::from_str(&env, "Test Description"),
-        String::from_str(&env, "Technology"),
-    ).unwrap();
+    assert_eq!(client.get_campaigns_by_category(&0, &0, &10).len(), 1);
+    assert_eq!(client.get_campaigns_by_category(&1, &0, &10).len(), 1);
+}
 
-    let result = RegistryContract::archive_project(env.clone(), id, admin);
-    assert!(result.is_ok());
+#[test]
+fn test_update_status_moves_campaign() {
+    let env = Env::default();
+    let (_admin, client) = deploy_and_init(&env);
+    let campaign = Address::generate(&env);
 
-    // Project should no longer be in the list
-    let ids = RegistryContract::get_all_project_ids(env);
-    assert!(!ids.contains(&id));
+    client.register_with_status(&campaign, &CampaignStatus::Active).unwrap();
+    client.update_status(&campaign, &CampaignStatus::Active, &CampaignStatus::Successful).unwrap();
+
+    assert_eq!(client.list_by_status(&CampaignStatus::Active, &0, &10).len(), 0);
+    assert_eq!(client.list_by_status(&CampaignStatus::Successful, &0, &10).len(), 1);
+    assert_eq!(client.list(&0, &10).len(), 1);
+}
+
+#[test]
+fn test_update_status_not_found() {
+    let env = Env::default();
+    let (_admin, client) = deploy_and_init(&env);
+    let unknown = Address::generate(&env);
+
+    let result = client.try_update_status(&unknown, &CampaignStatus::Active, &CampaignStatus::Successful);
+    assert_eq!(result, Err(Ok(ContractError::NotFound)));
+}
+
+#[test]
+fn test_list_pagination() {
+    let env = Env::default();
+    let (_admin, client) = deploy_and_init(&env);
+
+    for _ in 0..5 {
+        client.register(&Address::generate(&env)).unwrap();
+    }
+
+    assert_eq!(client.list(&0, &3).len(), 3);
+    assert_eq!(client.list(&3, &3).len(), 2);
+    assert_eq!(client.list(&5, &3).len(), 0);
+    assert_eq!(client.list(&0, &0).len(), 0);
 }
